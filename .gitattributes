@@ -1,0 +1,8 @@
+# Normalise line endings in the repository (LF), keep working copies as-is.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,114 @@
+import { z } from 'zod';
+
+/**
+ * All API payloads are validated with these schemas.
+ * Schemas are `.strict()` so unknown keys (NoSQL operator injections such as
+ * `{ "$ne": null }`) are rejected instead of being forwarded to MongoDB.
+ *
+ * Every rule below carries its own French message. Issues without explicit
+ * wording are translated by `zodIssueMessage()` in `src/lib/errors.ts`, so an
+ * English default from Zod is never returned to the client.
+ */
+
+export const USERNAME_PATTERN = /^[a-z]{6}$/;
+export const PASSWORD_PATTERN = /^[0-9]{4}$/;
+
+export const studentLoginSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(1, 'Champ requis')
+      .max(32, 'Champ trop long')
+      .transform((value) => value.toLowerCase()),
+    password: z
+      .string()
+      .trim()
+      .min(1, 'Champ requis')
+      .max(32, 'Champ trop long'),
+  })
+  .strict();
+
+export const adminLoginSchema = z
+  .object({
+    username: z.string().trim().min(1, 'Champ requis').max(64, 'Champ trop long'),
+    password: z.string().min(1, 'Champ requis').max(128, 'Champ trop long'),
+  })
+  .strict();
+
+export const createExperimentSchema = z
+  .object({
+    question: z
+      .string()
+      .trim()
+      .min(10, 'La question doit contenir au moins 10 caractères.')
+      .max(1000, 'La question ne peut pas dépasser 1000 caractères.'),
+  })
+  .strict();
+
+export const toggleAccessSchema = z
+  .object({
+    enabled: z.boolean({
+      required_error: 'Valeur manquante.',
+      invalid_type_error: 'Valeur invalide.',
+    }),
+  })
+  .strict();
+
+export const chatMessageSchema = z
+  .object({
+    content: z
+      .string()
+      .trim()
+      .min(1, 'Votre message ne peut pas être vide.')
+      .max(4000, 'Votre message ne peut pas dépasser 4000 caractères.'),
+  })
+  .strict();
+
+export const submitExpressionSchema = z
+  .object({
+    content: z
+      .string()
+      .trim()
+      .min(1, 'Votre texte ne peut pas être vide.')
+      .max(5000, 'Votre texte ne peut pas dépasser 5000 caractères.'),
+    clientRequestId: z
+      .string()
+      .trim()
+      .min(1, 'Identifiant de requête invalide.')
+      .max(64, 'Identifiant de requête trop long.')
+      .optional(),
+    baseVersionNumber: z
+      .number({
+        required_error: 'Numéro de version invalide.',
+        invalid_type_error: 'Numéro de version invalide.',
+      })
+      .int('Numéro de version invalide.')
+      .positive('Numéro de version invalide.')
+      .optional(),
+  })
+  .strict();
+
+export const idParamSchema = z.string().regex(/^[a-f\d]{24}$/i, 'Identifiant invalide.');
+
+export const paginationSchema = z.object({
+  limit: z.coerce
+    .number({ invalid_type_error: 'Nombre de résultats invalide.' })
+    .int('Nombre de résultats invalide.')
+    .min(1, 'Nombre de résultats invalide.')
+    .max(200, 'Nombre de résultats invalide.')
+    .default(50),
+  offset: z.coerce
+    .number({ invalid_type_error: 'Décalage invalide.' })
+    .int('Décalage invalide.')
+    .min(0, 'Décalage invalide.')
+    .max(100000, 'Décalage invalide.')
+    .default(0),
+});
+
+export type StudentLoginInput = z.infer<typeof studentLoginSchema>;
+export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
+export type CreateExperimentInput = z.infer<typeof createExperimentSchema>;
+export type ToggleAccessInput = z.infer<typeof toggleAccessSchema>;
+export type ChatMessageInput = z.infer<typeof chatMessageSchema>;
+export type SubmitExpressionInput = z.infer<typeof submitExpressionSchema>;
