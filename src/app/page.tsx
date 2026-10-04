@@ -1,9 +1,18 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
+import { resolveSessionTarget } from '@/server/services/authService';
 
-/** Entry point: redirects to the right workspace depending on the session. */
+export const dynamic = 'force-dynamic';
+
+/**
+ * Entry point: sends the visitor to the right workspace.
+ *
+ * The destination is confirmed against the database, so a revoked cookie lands
+ * on the login screen in a single hop instead of bouncing through a workspace
+ * that would reject it.
+ */
 export default async function RootPage() {
   const session = await getSession();
-  if (!session) redirect('/connexion');
-  redirect(session.role === 'admin' ? '/admin' : '/etudiant');
+  const target = session ? await resolveSessionTarget(session).catch(() => null) : null;
+  redirect(target ?? '/connexion');
 }

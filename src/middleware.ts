@@ -18,6 +18,10 @@ interface TokenPayload {
  * It only reads and verifies the signed session cookie: no database access is
  * possible here. Real authorization (access switch, epoch, ownership) is
  * enforced in the server layouts, pages and API routes.
+ *
+ * For the same reason it never redirects `/connexion`: it can confirm that a
+ * cookie is authentic but not that the session it describes still exists, and
+ * a guess would create a redirect loop with the server-side check.
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -46,13 +50,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
-  // Already connected users do not need the login screen.
-  if (isAuthRoute && pathname === '/connexion') {
-    return NextResponse.redirect(
-      new URL(session.role === 'admin' ? '/admin' : '/etudiant', request.url),
-    );
-  }
-
+  // `/connexion` is deliberately NOT redirected from here. A signature that is
+  // still valid can describe a session the database has already revoked (reset
+  // password, bumped epoch, deleted account). The server, which can read the
+  // database, decides on `/connexion` itself: bouncing here would trap revoked
+  // users in an endless /connexion <-> workspace redirect loop.
   return NextResponse.next();
 }
 

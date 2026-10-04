@@ -252,6 +252,7 @@ async function run() {
     await checkConversationLabels();
     await checkFrenchPlurals();
     await checkConnectionResilience();
+    await checkRevokedSessionRedirects();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
     results.push({ group: 'Harnais', label: 'Exécution du test', ok: false, detail: String(error?.message ?? error) });
@@ -1315,6 +1316,135 @@ async function checkFrenchPlurals() {
       fautifs.length ? fautifs.join(', ') : `${composants.length} fichiers analysés`,
     );
   }
+}
+
+/**
+ * 20. A revoked session must not create a redirect loop.
+ *
+ * The session cookie is a JWT: it stays cryptographically valid for its whole
+ * lifetime, even after the database has invalidated what it describes (reset
+ * password, access epoch bumped, account deleted). The edge middleware cannot
+ * read the database, so once it sent every valid cookie away from /connexion,
+ * a revoked user bounced between /connexion and its workspace until the
+ * browser gave up with ERR_TOO_MANY_REDIRECTS — unable to even log in again.
+ *
+ * The chain must now settle on the login screen, quickly.
+ */
+async function checkRevokedSessionRedirects() {
+  group('20. Session révoquée (aucune boucle de redirection)');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+
+  const account = await admin.postJson('/api/admin/students', {});
+  const student = createClient();
+  await student.postJson('/api/auth/student/login', {
+    username: account.data?.student?.username,
+    password: account.data?.password,
+  });
+
+  const connected = await student.get('/etudiant');
+  check(
+    'Session étudiante active au départ',
+    connected.response.status === 200,
+    `HTTP ${connected.response.status}`,
+  );
+
+  // The administrator resets the password: the signature stays valid, the
+  // database no longer recognises the session.
+  const reset = await admin.postJson(
+    `/api/admin/students/${account.data?.student?.id}/password`,
+    {},
+  );
+  check(
+    'Réinitialisation du mot de passe par l’administrateur',
+    reset.response.status === 201 && /^[0-9]{4}$/.test(reset.data?.password ?? ''),
+    `nouveau mot de passe ${reset.data?.password ?? '—'}`,
+  );
+
+  const stillSigned = student.cookies.get('atelier_session') ?? '';
+  check(
+    'Le cookie conserve une signature valide (le cas piégé)',
+    stillSigned.length > 20,
+    `${stillSigned.split('.').length} segments JWT`,
+  );
+
+  const workspace = await student.get('/etudiant');
+  check(
+    'Espace étudiant refusé (redirection vers /connexion)',
+    workspace.response.status === 307 &&
+      (workspace.response.headers.get('location') ?? '').includes('/connexion'),
+    `HTTP ${workspace.response.status} ${workspace.response.headers.get('location') ?? ''}`,
+  );
+
+  const loginPage = await student.get('/connexion');
+  const html = loginPage.data?.html ?? '';
+  check(
+    'La page de connexion s’affiche au lieu de renvoyer en boucle',
+    loginPage.response.status === 200 && html.includes('Se connecter'),
+    `HTTP ${loginPage.response.status}`,
+  );
+
+  const root = await student.get('/');
+  check(
+    'La racine mène directement à la connexion (un seul saut)',
+    root.response.status === 307 &&
+      (root.response.headers.get('location') ?? '').includes('/connexion'),
+    `HTTP ${root.response.status} ${root.response.headers.get('location') ?? ''}`,
+  );
+
+  // The observable symptom: Chrome's ERR_TOO_MANY_REDIRECTS happens after 20
+  // hops. Follow the chain as a browser would and make sure it terminates.
+  const { hops, finalPath } = await followRedirects(student, '/etudiant', 10);
+  check(
+    'La redirection aboutit sur l’écran de connexion',
+    finalPath === '/connexion' && hops <= 3,
+    `${hops} saut(s) → ${finalPath}`,
+  );
+
+  // And the student must be able to log in again with the new password.
+  const relogin = await student.postJson('/api/auth/student/login', {
+    username: account.data?.student?.username,
+    password: reset.data?.password,
+  });
+  check(
+    'Connexion possible avec le nouveau mot de passe',
+    relogin.response.status === 200,
+    `HTTP ${relogin.response.status}`,
+  );
+
+  const back = await student.get('/etudiant');
+  check(
+    'Espace étudiant de nouveau accessible',
+    back.response.status === 200,
+    `HTTP ${back.response.status}`,
+  );
+
+  // The edge must keep its hands off /connexion: it cannot know the truth.
+  const middleware = await readSource('src/middleware.ts');
+  check(
+    'Le middleware ne redirige plus /connexion',
+    !/isAuthRoute\s*&&\s*pathname\s*===\s*'\/connexion'/.test(middleware),
+    'la décision revient au serveur',
+  );
+}
+
+/** Follows redirects the way a browser does and reports where it settles. */
+async function followRedirects(client, startPath, maxHops) {
+  let path = startPath;
+  let hops = 0;
+  while (hops < maxHops) {
+    const response = await client.request(path);
+    if (response.status < 300 || response.status >= 400) return { hops, finalPath: path };
+    const location = response.headers.get('location');
+    if (!location) return { hops, finalPath: path };
+    path = new URL(location, BASE_URL).pathname;
+    hops += 1;
+  }
+  return { hops, finalPath: `${path} (boucle)` };
 }
 
 /** Reads a source file of the project (used by the resilience checks). */
