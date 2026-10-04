@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, Copy, KeyRound, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,20 +21,26 @@ import { CredentialRow } from './credential-row';
 
 const t = getDictionary();
 
-interface Credentials {
-  username: string;
-  password: string;
-}
-
 /**
- * Creates a student account. The username (6 lowercase letters) and the
- * password (4 digits) are generated server-side and displayed only once.
+ * Administrator action: generates a new 4-digit password for a student.
+ *
+ * The password is stored only as a bcrypt hash and displayed once. Sessions
+ * opened with the previous password are revoked immediately.
  */
-export function CreateStudentDialog() {
+export function ResetPasswordButton({
+  studentId,
+  size = 'xs',
+}: {
+  studentId: string;
+  size?: 'xs' | 'sm';
+}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [creating, setCreating] = React.useState(false);
-  const [credentials, setCredentials] = React.useState<Credentials | null>(null);
+  const [resetting, setResetting] = React.useState(false);
+  const [credentials, setCredentials] = React.useState<{
+    username: string;
+    password: string;
+  } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<'all' | 'username' | 'password' | null>(null);
 
@@ -44,26 +50,28 @@ export function CreateStudentDialog() {
     setCopied(null);
   }
 
-  async function handleCreate() {
-    setCreating(true);
+  async function handleReset() {
+    setResetting(true);
     setError(null);
     try {
-      const response = await fetch('/api/admin/students', { method: 'POST' });
+      const response = await fetch(`/api/admin/students/${studentId}/password`, {
+        method: 'POST',
+      });
       const data = await response.json().catch(() => null);
 
-      if (!response.ok || !data?.student?.username) {
+      if (!response.ok || !data?.password || !data?.student?.username) {
         throw new Error(data?.error?.message ?? ERROR_MESSAGES.SERVER_ERROR);
       }
 
       setCredentials({ username: data.student.username, password: data.password });
-      toast.success(t.students.created);
+      toast.success(t.students.passwordReset);
       router.refresh();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : ERROR_MESSAGES.SERVER_ERROR;
       setError(message);
       toast.error(message);
     } finally {
-      setCreating(false);
+      setResetting(false);
     }
   }
 
@@ -86,9 +94,9 @@ export function CreateStudentDialog() {
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm">
-          <UserPlus className="h-4 w-4" aria-hidden />
-          {t.students.create}
+        <Button variant="outline" size={size} type="button">
+          <KeyRound className="h-3.5 w-3.5" aria-hidden />
+          {t.students.resetPassword}
         </Button>
       </DialogTrigger>
 
@@ -98,9 +106,9 @@ export function CreateStudentDialog() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Check className="h-5 w-5 text-success" aria-hidden />
-                {t.students.credentialsTitle}
+                {t.students.newPasswordTitle}
               </DialogTitle>
-              <DialogDescription>{t.students.credentialsBody}</DialogDescription>
+              <DialogDescription>{t.students.newPasswordBody}</DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 space-y-3">
@@ -141,36 +149,24 @@ export function CreateStudentDialog() {
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>{t.students.createTitle}</DialogTitle>
-              <DialogDescription>{t.students.createIntro}</DialogDescription>
+              <DialogTitle>{t.students.resetPasswordTitle}</DialogTitle>
+              <DialogDescription>{t.students.resetPasswordIntro}</DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-border bg-muted/50 p-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {t.students.credentialsUsername}
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">6 lettres minuscules</p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/50 p-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {t.students.credentialsPassword}
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">4 chiffres</p>
-                </div>
-              </div>
-
+              <Alert tone="warning" icon={<AlertTriangle className="h-4 w-4" />}>
+                {t.students.resetPasswordWarning}
+              </Alert>
               {error ? <Alert tone="destructive">{error}</Alert> : null}
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)} disabled={creating}>
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={resetting}>
                 {t.common.cancel}
               </Button>
-              <Button loading={creating} onClick={() => void handleCreate()}>
+              <Button loading={resetting} onClick={() => void handleReset()}>
                 <KeyRound className="h-4 w-4" aria-hidden />
-                {creating ? t.students.creating : t.students.create}
+                {resetting ? t.students.resetting : t.students.resetPassword}
               </Button>
             </DialogFooter>
           </>

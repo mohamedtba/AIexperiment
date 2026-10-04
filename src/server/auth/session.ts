@@ -15,6 +15,12 @@ export interface SessionPayload {
   role: SessionRole;
   /** Access epoch: a student session is only valid for the current epoch. */
   accessEpoch: number;
+  /**
+   * Student password version: a reset by the administrator increments it, which
+   * immediately invalidates the sessions opened with the old password.
+   * Always 0 for the administrator.
+   */
+  passwordVersion: number;
 }
 
 /**
@@ -31,6 +37,7 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
     username: payload.username,
     role: payload.role,
     accessEpoch: payload.accessEpoch,
+    passwordVersion: payload.passwordVersion,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(payload.userId)
@@ -63,6 +70,8 @@ export async function verifySessionToken(
       username: payload.username,
       role: payload.role,
       accessEpoch: typeof payload.accessEpoch === 'number' ? payload.accessEpoch : 0,
+      passwordVersion:
+        typeof payload.passwordVersion === 'number' ? payload.passwordVersion : 0,
     };
   } catch {
     return null;

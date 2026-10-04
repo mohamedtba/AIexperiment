@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bot, ChevronRight, FileText, Users } from 'lucide-react';
 import { CreateStudentDialog } from '@/components/admin/create-student-dialog';
+import { ResetPasswordButton } from '@/components/admin/reset-password-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/alert';
@@ -87,13 +88,16 @@ export default async function AdminStudentsPage() {
                     <td className="px-5 py-3 text-muted-foreground">
                       <RelativeTime value={student.activity.lastActivityAt} />
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <Button asChild variant="outline" size="xs">
-                        <Link href={`/admin/etudiants/${student.id}`}>
-                          {t.students.openDetail}
-                          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                        </Link>
-                      </Button>
+                    <td className="px-5 py-3">
+                      <div className="flex justify-end gap-2">
+                        <ResetPasswordButton studentId={student.id} />
+                        <Button asChild variant="outline" size="xs">
+                          <Link href={`/admin/etudiants/${student.id}`}>
+                            {t.students.openDetail}
+                            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                          </Link>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -105,43 +109,50 @@ export default async function AdminStudentsPage() {
           <ul className="space-y-3 lg:hidden">
             {students.map((student) => (
               <li key={student.id}>
-                <Link
-                  href={`/admin/etudiants/${student.id}`}
-                  className="block rounded-lg border border-border bg-card p-4 shadow-card transition-colors hover:border-primary/40"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-mono text-base font-semibold tracking-wide">
-                      {student.username}
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  </div>
+                <div className="rounded-lg border border-border bg-card p-4 shadow-card">
+                  <Link
+                    href={`/admin/etudiants/${student.id}`}
+                    className="block transition-colors hover:opacity-90"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-mono text-base font-semibold tracking-wide">
+                        {student.username}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    </div>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t.students.createdAt} <DateTime value={student.createdAt} mode="date" />
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge variant={student.activity.aiMessages > 0 ? 'ai' : 'neutral'}>
-                      <Bot className="h-3 w-3" aria-hidden />
-                      {student.activity.aiMessages} {t.common.messages}
-                    </Badge>
-                    <Badge variant={student.activity.expressionVersions > 0 ? 'success' : 'neutral'}>
-                      <FileText className="h-3 w-3" aria-hidden />
-                      {student.activity.expressionVersions} {t.common.versions}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {t.students.lastActivity} :{' '}
-                      <RelativeTime value={student.activity.lastActivityAt} />
-                    </span>
-                  </div>
-
-                  {experiment ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {t.students.activity} :{' '}
-                      {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t.students.createdAt} <DateTime value={student.createdAt} mode="date" />
                     </p>
-                  ) : null}
-                </Link>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge variant={student.activity.aiMessages > 0 ? 'ai' : 'neutral'}>
+                        <Bot className="h-3 w-3" aria-hidden />
+                        {student.activity.aiMessages} {t.common.messages}
+                      </Badge>
+                      <Badge variant={student.activity.expressionVersions > 0 ? 'success' : 'neutral'}>
+                        <FileText className="h-3 w-3" aria-hidden />
+                        {student.activity.expressionVersions} {t.common.versions}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {t.students.lastActivity} :{' '}
+                        <RelativeTime value={student.activity.lastActivityAt} />
+                      </span>
+                    </div>
+
+                    {experiment ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {t.students.activity} :{' '}
+                        {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
+                      </p>
+                    ) : null}
+                  </Link>
+
+                  {/* Hors du lien : un bouton dans un lien serait inaccessible au clavier. */}
+                  <div className="mt-3 flex justify-end border-t border-border pt-3">
+                    <ResetPasswordButton studentId={student.id} size="sm" />
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

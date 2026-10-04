@@ -5,12 +5,13 @@ import { adminRepository, studentRepository } from '../db/repositories/accounts'
 import { hashStudentPassword, verifyPassword } from '../auth/password';
 import { clientIp, rateLimit } from '../auth/rate-limit';
 import { getAccessSettings } from './accessService';
-import { generateCredentials } from './credentials';
+import { generateCredentials, generatePassword } from './credentials';
 import type { AdminPublic, StudentPublic } from '@/types';
 
 export interface StudentLoginResult {
   student: StudentPublic;
   accessEpoch: number;
+  passwordVersion: number;
 }
 
 export interface AdminLoginResult {
@@ -47,7 +48,36 @@ export async function loginStudent(
       lastLoginAt: new Date(),
     },
     accessEpoch: access.accessEpoch,
+    passwordVersion: student.passwordVersion ?? 1,
   };
+}
+
+/**
+ * Generates a new 4-digit password for a student. The plaintext password is
+ * returned once to the administrator and never stored in clear.
+ * Incrementing `passwordVersion` immediately revokes the sessions that were
+ * opened with the previous password.
+ */
+export async function resetStudentPassword(studentId: string): Promise<{
+  username: string;
+  password: string;
+}> {
+  const student = await studentRepository.findAuthById(studentId);
+  if (!student) throw new AppError('STUDENT_NOT_FOUND');
+
+  const password = generatePassword();
+  await studentRepository.resetPassword(studentId, await hashStudentPassword(password));
+
+  return { username: student.username, password };
+}
+
+/** A student session is only current while the password version matches. */
+export async function isStudentSessionCurrent(
+  studentId: string,
+  passwordVersion: number,
+): Promise<boolean> {
+  const stored = await studentRepository.getPasswordVersion(studentId);
+  return stored !== null && stored === passwordVersion;
 }
 
 /** Administrator login (single account, no registration). */

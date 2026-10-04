@@ -143,6 +143,17 @@ export const students = {
   copyUsername: 'Copier l’identifiant',
   copyPassword: 'Copier le mot de passe',
   created: 'Étudiant créé',
+  resetPassword: 'Nouveau mot de passe',
+  resetPasswordTitle: 'Réinitialiser le mot de passe',
+  resetPasswordIntro:
+    'Un nouveau mot de passe de 4 chiffres sera généré pour cet étudiant. L’ancien mot de passe cessera de fonctionner immédiatement.',
+  resetPasswordWarning:
+    'L’étudiant sera déconnecté de tous ses appareils et devra se reconnecter avec le nouveau mot de passe.',
+  resetting: 'Réinitialisation…',
+  passwordReset: 'Mot de passe réinitialisé',
+  newPasswordTitle: 'Nouveau mot de passe',
+  newPasswordBody:
+    'Communiquez ce mot de passe à l’étudiant. Il ne sera plus jamais affiché ensuite.',
   detailTitle: 'Fiche étudiant',
   detailBack: 'Retour aux étudiants',
   conversationTitle: 'Conversation IA',

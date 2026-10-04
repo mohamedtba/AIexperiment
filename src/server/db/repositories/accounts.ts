@@ -86,11 +86,53 @@ export const studentRepository = {
       _id: new ObjectId(),
       username,
       passwordHash,
+      passwordVersion: 1,
       createdAt: new Date(),
       lastLoginAt: null,
     };
     await collectionReady<StudentDocument>(COLLECTIONS.students).insertOne(doc);
     return mapStudent(doc);
+  },
+
+  /** Password version used to invalidate sessions after a reset. */
+  async getPasswordVersion(id: string): Promise<number | null> {
+    if (!ObjectId.isValid(id)) return null;
+    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne(
+      { _id: new ObjectId(id) },
+      { projection: { passwordVersion: 1 } },
+    );
+    return doc ? (doc.passwordVersion ?? 1) : null;
+  },
+
+  async findAuthById(id: string): Promise<{ username: string; passwordVersion: number } | null> {
+    if (!ObjectId.isValid(id)) return null;
+    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne(
+      { _id: new ObjectId(id) },
+      { projection: { username: 1, passwordVersion: 1 } },
+    );
+    return doc ? { username: doc.username, passwordVersion: doc.passwordVersion ?? 1 } : null;
+  },
+
+  /**
+   * Replaces the password hash and increments the version, which invalidates the
+   * sessions created with the previous password.
+   */
+  async resetPassword(id: string, passwordHash: string): Promise<number | null> {
+    if (!ObjectId.isValid(id)) return null;
+    const result = await collectionReady<StudentDocument>(COLLECTIONS.students).findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      {
+        $set: { passwordHash, updatedAt: new Date() },
+        $inc: { passwordVersion: 1 },
+      },
+      { returnDocument: 'after', projection: { passwordVersion: 1 } },
+    );
+    // The driver returns either the document or a ModifyResult depending on the
+    // version / options.
+    const doc = (result && 'value' in result ? result.value : result) as
+      | { passwordVersion?: number }
+      | null;
+    return doc ? (doc.passwordVersion ?? 1) : null;
   },
 
   async list(limit = 500, offset = 0): Promise<StudentPublic[]> {

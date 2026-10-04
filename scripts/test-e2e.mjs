@@ -672,8 +672,128 @@ async function runTests() {
     );
   }
 
+  /* Réinitialisation du mot de passe d'un étudiant (administrateur) */
+  group('10. Réinitialisation du mot de passe');
+  {
+    const created2 = await admin.postJson('/api/admin/students');
+    const studentId = created2.data?.student?.id;
+    const username = created2.data?.student?.username;
+    const firstPassword = created2.data?.password;
+    check(
+      'Création : mot de passe à 4 chiffres',
+      /^[0-9]{4}$/.test(firstPassword ?? '') && /^[a-z]{6}$/.test(username ?? ''),
+      `${username} / ${firstPassword}`,
+    );
+
+    const session = createClient();
+    const login = await session.postJson('/api/auth/student/login', {
+      username,
+      password: firstPassword,
+    });
+    check(
+      'Connexion de l’étudiant avant réinitialisation',
+      login.response.status === 200,
+      `HTTP ${login.response.status}`,
+    );
+
+    const reset = await admin.postJson(`/api/admin/students/${studentId}/password`);
+    check(
+      'Réinitialisation : nouveau mot de passe à 4 chiffres renvoyé',
+      reset.response.status === 201 &&
+        /^[0-9]{4}$/.test(reset.data?.password ?? '') &&
+        reset.data?.student?.username === username,
+      reset.data?.password ?? JSON.stringify(reset.data?.error ?? {}),
+    );
+
+    const revoked = await session.get('/api/student/experiment');
+    check(
+      'Session révoquée après réinitialisation (401)',
+      revoked.response.status === 401 && revoked.data?.error?.code === 'SESSION_EXPIRED',
+      revoked.data?.error?.message ?? `HTTP ${revoked.response.status}`,
+    );
+
+    const redirected = await session.get('/etudiant');
+    check(
+      'Étudiant renvoyé vers la connexion après réinitialisation',
+      redirected.response.status === 307 &&
+        (redirected.response.headers.get('location') ?? '').includes('/connexion'),
+      `HTTP ${redirected.response.status}`,
+    );
+
+    const oldPassword = await createClient().postJson('/api/auth/student/login', {
+      username,
+      password: firstPassword,
+    });
+    check(
+      'Ancien mot de passe refusé',
+      oldPassword.response.status === 401,
+      oldPassword.data?.error?.message ?? `HTTP ${oldPassword.response.status}`,
+    );
+
+    const fresh = createClient();
+    const newLogin = await fresh.postJson('/api/auth/student/login', {
+      username,
+      password: reset.data?.password,
+    });
+    check(
+      'Nouveau mot de passe accepté',
+      newLogin.response.status === 200,
+      newLogin.data?.error?.message ?? `HTTP ${newLogin.response.status}`,
+    );
+
+    const forbidden = await fresh.postJson(`/api/admin/students/${studentId}/password`);
+    check(
+      'Un étudiant ne peut pas réinitialiser un mot de passe',
+      forbidden.response.status === 403,
+      `HTTP ${forbidden.response.status}`,
+    );
+
+    const unauth = await createClient().postJson(`/api/admin/students/${studentId}/password`);
+    check(
+      'Sans session : réinitialisation refusée',
+      unauth.response.status === 401,
+      `HTTP ${unauth.response.status}`,
+    );
+
+    const listing = await admin.get('/api/admin/students');
+    const detail = await admin.get(`/api/admin/students/${studentId}`);
+    check(
+      'Le mot de passe n’est jamais renvoyé par l’API',
+      !JSON.stringify(listing.data).includes(reset.data?.password) &&
+        !JSON.stringify(detail.data).includes(reset.data?.password),
+    );
+
+    const invalid = await admin.postJson('/api/admin/students/inconnu/password');
+    check(
+      'Identifiant invalide → message en français',
+      invalid.response.status === 400 && invalid.data?.error?.message === 'Identifiant invalide.',
+      invalid.data?.error?.message ?? `HTTP ${invalid.response.status}`,
+    );
+
+    const unknown = await admin.postJson('/api/admin/students/000000000000000000000000/password');
+    check(
+      'Étudiant inexistant → 404',
+      unknown.response.status === 404,
+      unknown.data?.error?.message ?? `HTTP ${unknown.response.status}`,
+    );
+
+    const listPage = await admin.get('/admin/etudiants');
+    check(
+      'Bouton « Nouveau mot de passe » présent dans la liste des étudiants',
+      (listPage.data?.html ?? '').includes('Nouveau mot de passe'),
+      `HTTP ${listPage.response.status}`,
+    );
+
+    const detailPage = await admin.get(`/admin/etudiants/${studentId}`);
+    check(
+      'Bouton présent sur la fiche de l’étudiant',
+      (detailPage.data?.html ?? '').includes('Nouveau mot de passe'),
+      `HTTP ${detailPage.response.status}`,
+    );
+  }
+
   /* 19. Expériences précédentes */
-  group('10. Archives');
+  group('11. Archives');
   {
     const list = await admin.get('/api/admin/experiments');
     const archived = list.data?.archived ?? [];
@@ -707,7 +827,7 @@ async function runTests() {
   }
 
   /* 20-22. Bascule d'accès */
-  group('11. Contrôle global d’accès');
+  group('12. Contrôle global d’accès');
   {
     const toggleOff = await admin.postJson('/api/admin/access', { enabled: false });
     check(
@@ -786,7 +906,7 @@ async function runTests() {
   }
 
   /* 19-bis. Nouvelle expérience : conversation et versions neuves */
-  group('12. Nouvelle expérience');
+  group('13. Nouvelle expérience');
   {
     const newExperiment = await admin.postJson('/api/admin/experiments', { question: QUESTION_3 });
     check(
@@ -853,7 +973,7 @@ async function runTests() {
   }
 
   /* Déconnexion */
-  group('13. Déconnexion');
+  group('14. Déconnexion');
   {
     const logout = await alice.postJson('/api/auth/logout', {});
     check('Déconnexion effectuée', logout.response.status === 200);
@@ -867,7 +987,7 @@ async function runTests() {
   }
 
   /* Interface 100 % française */
-  group('14. Interface en français');
+  group('15. Interface en français');
   {
     const student = createClient();
     await student.postJson('/api/auth/student/login', {
@@ -990,7 +1110,7 @@ function visibleLength(html) {
 }
 
 async function checkNoSecretExposure() {
-  group('15. Sécurité des secrets');
+  group('16. Sécurité des secrets');
   const chunksDir = path.join(process.cwd(), '.next', 'static', 'chunks');
   let files = [];
   try {

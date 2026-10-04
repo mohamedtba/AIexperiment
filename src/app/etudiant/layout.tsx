@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { getDictionary } from '@/i18n';
 import { getSession } from '@/server/auth/session';
 import { getAccessSettings } from '@/server/services/accessService';
+import { isStudentSessionCurrent } from '@/server/services/authService';
 
 const t = getDictionary();
 
@@ -16,7 +17,8 @@ export const dynamic = 'force-dynamic';
  *
  * The global access switch and the session epoch are checked on the server:
  *  - access suspended by the administrator → suspension screen, data preserved;
- *  - session revoked (epoch mismatch)     → back to the login screen.
+ *  - session revoked (epoch mismatch)     → back to the login screen;
+ *  - password reset by the administrator  → back to the login screen.
  */
 export default async function StudentLayout({
   children,
@@ -56,6 +58,16 @@ export default async function StudentLayout({
   }
 
   if (session.accessEpoch !== access.accessEpoch) {
+    redirect('/connexion');
+  }
+
+  // The administrator reset this student's password: the session opened with the
+  // previous one is revoked.
+  const sessionCurrent = await isStudentSessionCurrent(
+    session.userId,
+    session.passwordVersion,
+  ).catch(() => true);
+  if (!sessionCurrent) {
     redirect('/connexion');
   }
 

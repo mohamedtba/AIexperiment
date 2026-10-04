@@ -13,6 +13,7 @@ export const POST = createRouteHandler({
       username: result.student.username,
       role: 'student',
       accessEpoch: result.accessEpoch,
+      passwordVersion: result.passwordVersion,
     });
     return jsonOk({ username: result.student.username });
   },

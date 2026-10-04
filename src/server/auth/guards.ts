@@ -3,6 +3,7 @@ import 'server-only';
 import { AppError } from '@/lib/errors';
 import { getSession, type SessionPayload } from './session';
 import { getAccessSettings } from '../services/accessService';
+import { isStudentSessionCurrent } from '../services/authService';
 
 export interface AuthenticatedStudent {
   studentId: string;
@@ -39,6 +40,9 @@ export async function requireStudent(): Promise<AuthenticatedStudent> {
   if (session.accessEpoch !== access.accessEpoch) {
     throw new AppError('SESSION_EXPIRED', 401);
   }
+  // A password reset by the administrator revokes the previous sessions.
+  const current = await isStudentSessionCurrent(session.userId, session.passwordVersion);
+  if (!current) throw new AppError('SESSION_EXPIRED', 401);
 
   return { studentId: session.userId, username: session.username, session };
 }

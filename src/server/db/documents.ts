@@ -24,7 +24,14 @@ export interface StudentDocument {
   _id: ObjectId;
   username: string;
   passwordHash: string;
+  /**
+   * Incremented every time the administrator resets the password. It is
+   * carried by the student session so a reset immediately invalidates the
+   * sessions opened with the previous password.
+   */
+  passwordVersion: number;
   createdAt: Date;
+  updatedAt?: Date;
   lastLoginAt: Date | null;
 }
 

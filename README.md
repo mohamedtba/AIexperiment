@@ -28,7 +28,7 @@ The administrator can suspend student access globally, browse every conversation
 10. [Production build](#production-build)
 11. [Deployment on Render](#deployment-on-render)
 12. [Automated test suite](#automated-test-suite)
-13. [Manual test checklist (26 checks)](#manual-test-checklist-26-checks)
+13. [Manual test checklist (28 checks)](#manual-test-checklist-28-checks)
 14. [Project structure](#project-structure)
 15. [Security notes](#security-notes)
 
@@ -40,6 +40,7 @@ The administrator can suspend student access globally, browse every conversation
 
 - **Tableau de bord** — statistics of the active experiment (students, AI messages, versions), recent activity, quick access to the access switch.
 - **Étudiants** — generates student accounts. Each username is exactly **6 lowercase letters**, each password exactly **4 digits**; uniqueness is verified at the database level (unique index) and in the service.
+- **Nouveau mot de passe** (per student, in the list and on the student sheet) — generates a **new 4-digit password**, displayed once, for a student who lost theirs. Passwords are bcrypt hashes and can never be read back, so this generates a new one instead of showing the old one. The sessions opened with the previous password are revoked immediately (`passwordVersion` claim), the student is returned to the login screen and must re-authenticate.
 - **Étudiant (detail)** — full AI conversation and all writing versions of that student for a given experiment.
 - **Expérience actuelle** — starts a new experiment (the “question of the day”). Starting a new one **archives** the previous experiment; all of its data is preserved.
 - **Expériences précédentes** — list and detail of every archived experiment, including per-student navigation.
@@ -231,11 +232,11 @@ The harness is not a mock: it starts a **real production build** (`next start`) 
 - a **real MongoDB** (`mongodb-memory-server`, first run downloads a binary ~780 MB and caches it),
 - a **local Gemini-compatible endpoint** (no API key, no internet required),
 
-then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **97/97 checks green**, in 15 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, archives, global access switch, new experiment, logout, French-only UI, and secret exposure.
+then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **111/111 checks green**, in 16 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, password reset, archives, global access switch, new experiment, logout, French-only UI, and secret exposure.
 
 ---
 
-## Manual test checklist (26 checks)
+## Manual test checklist (28 checks)
 
 Run through this list once after the deployment, on a phone and on a computer.
 
@@ -251,25 +252,27 @@ Run through this list once after the deployment, on a phone and on a computer.
 8. **Start an experiment** (Expérience actuelle) → the question becomes the *question du jour*.
 9. **Start a second experiment** → the first one is **archived** and still listed in *Expériences précédentes*.
 10. **Browse an archived experiment** → detail page, statistics and per-student drill-down are accessible.
-11. **Switch “Autoriser l’accès des étudiants” off** → confirmation dialog in French.
-12. **Try to sign in as a student while access is off** → refused: *« L'accès aux étudiants est actuellement désactivé. »*
-13. **Use an already-open student session while access is off** → immediately sent to *Le temps est écoulé. L’expérience est actuellement suspendue.*, and sending a message is refused.
-14. **Switch access back on** → the administrator stays connected throughout; students can sign in again.
-15. **Confirm no data was lost** after the suspension: previous messages and versions are still there.
+11. **Reset a student password** (Étudiants → *Nouveau mot de passe*, or the student sheet) → a new 4-digit password is displayed once, the username is unchanged, and the old password is not recoverable.
+12. **Sign in as that student with the previous password** → refused; the new password works.
+13. **With the student connected, reset their password again** → their open session stops working immediately and they land on the login screen; their conversation and versions are preserved.
+14. **Switch “Autoriser l’accès des étudiants” off** → confirmation dialog in French.
+15. **Try to sign in as a student while access is off** → refused: *« L'accès aux étudiants est actuellement désactivé. »*
+16. **Use an already-open student session while access is off** → immediately sent to *Le temps est écoulé. L’expérience est actuellement suspendue.*, and sending a message is refused.
+17. **Switch access back on** → the administrator stays connected throughout; students can sign in again.
+18. **Confirm no data was lost** after the suspension: previous messages and versions are still there.
 
 ### Student
 
-16. **Open `/etudiant`** → the question of the day is displayed, in French.
-17. **Send a message to the AI** → an answer arrives; the exchange is stored.
-18. **Check independence of the two spaces** → the question of the day and the written text are **never** sent to Gemini (verify in the network panel: the payload only contains your messages).
-19. **Refresh the page** → the conversation and the versions are still there.
-20. **Submit a text** (*Envoyer*) → version 1 appears with the *Dernière version* badge.
-21. **Click *Modifier*** → the latest text is loaded; saving creates **version 2**, version 1 is preserved above it.
-22. **Submit again a few times** → the feed shows all versions in chronological order, never overwritten.
-23. **Start a new experiment as the administrator**, then reconnect as the student → conversation empty, version numbering back to 1.
-24. **Sign out** → the session is closed, and going back to `/etudiant` redirects to `/connexion`.
-25. **Mobile (375 px)** → navigation, chat, and writing area remain usable; the layout never overflows horizontally.
-26. **Read every screen in French** → no English word appears anywhere in the interface (validated automatically by the suite, group 14).
+19. **Open `/etudiant`** → the question of the day is displayed, in French.
+20. **Send a message to the AI** → an answer arrives; the exchange is stored.
+21. **Check independence of the two spaces** → the question of the day and the written text are **never** sent to Gemini (verify in the network panel: the payload only contains your messages).
+22. **Refresh the page** → the conversation and the versions are still there.
+23. **Submit a text** (*Envoyer*) → version 1 appears with the *Dernière version* badge.
+24. **Click *Modifier*** → the latest text is loaded; saving creates **version 2**, version 1 is preserved above it.
+25. **Submit again a few times** → the feed shows all versions in chronological order, never overwritten.
+26. **Start a new experiment as the administrator**, then reconnect as the student → conversation empty, version numbering back to 1.
+27. **Sign out** → the session is closed, and going back to `/etudiant` redirects to `/connexion`.
+28. **Mobile (375 px)** → navigation, chat, and writing area remain usable; the layout never overflows horizontally. Then **read every screen in French** → no English word appears anywhere in the interface (validated automatically by the suite, group 15).
 
 ---
 
@@ -305,7 +308,8 @@ src/
 
 - Passwords hashed with **bcrypt**; no plaintext credential is ever logged.
 - Sessions are **JWT signed (HS256)** and stored in an **HttpOnly** cookie; `AUTH_SECRET` lives only on the server.
-- **Server-side authorisation**: `requireAdmin()` / `requireStudent()` derive the identity from the cookie. The role and the *access epoch* are verified on every request; the epoch is incremented on each access toggle, which revokes every student session instantly.
+- **Server-side authorisation**: `requireAdmin()` / `requireStudent()` derive the identity from the cookie. The role, the *access epoch* and the student *password version* are verified on every request; the epoch is incremented on each access toggle (revoking every student session instantly) and the password version on each password reset (revoking that student's sessions only).
+- Passwords can only be **regenerated**, never read back: the reset endpoint returns the new plaintext password exactly once, and no endpoint ever returns a password afterwards.
 - The **edge middleware** only verifies the signature (no database in the Edge runtime); real authorisation happens in the layouts, pages and API routes.
 - **NoSQL injection**: every payload schema is `.strict()`, identifiers are validated against `/^[a-f\d]{24}$/i`, and `studentId` / `experimentId` sent by a client are rejected.
 - **Rate limiting** on logins (per IP) and AI messages (per student).

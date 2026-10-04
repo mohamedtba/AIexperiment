@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Bot, FileText, MessageSquare, PenLine, User } from 'lucide-react';
 import { StatCard } from '@/components/admin/stat-card';
+import { ResetPasswordButton } from '@/components/admin/reset-password-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,14 +54,17 @@ export default async function AdminStudentDetailPage({
         title={student.username}
         subtitle={`${t.students.accountCreated} ${formatDateFr(student.createdAt)}`}
         actions={
-          experiment ? (
-            <Badge variant={experiment.status === 'ACTIVE' ? 'success' : 'neutral'}>
-              {experimentRecord
-                ? t.experiments.experimentNumber.replace('{n}', String(experimentRecord.sequence))
-                : t.students.activity}
-              {experiment.status === 'ACTIVE' ? ` · ${t.experiments.statusActive}` : ''}
-            </Badge>
-          ) : null
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {experiment ? (
+              <Badge variant={experiment.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                {experimentRecord
+                  ? t.experiments.experimentNumber.replace('{n}', String(experimentRecord.sequence))
+                  : t.students.activity}
+                {experiment.status === 'ACTIVE' ? ` · ${t.experiments.statusActive}` : ''}
+              </Badge>
+            ) : null}
+            <ResetPasswordButton studentId={student.id} size="sm" />
+          </div>
         }
       />
 
