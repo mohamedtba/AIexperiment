@@ -68,14 +68,22 @@ export default async function CurrentExperimentPage() {
               <StatCard
                 label={t.common.messages}
                 value={stats?.aiMessages ?? 0}
-                hint={`${stats?.aiStudents ?? 0} ${t.admin.cardAIUsers}`}
+                hint={t.common.plural(
+                  stats?.aiStudents ?? 0,
+                  t.admin.cardAIUser,
+                  t.admin.cardAIUsers,
+                )}
                 icon={Bot}
                 tone="ai"
               />
               <StatCard
                 label={t.common.versions}
                 value={stats?.expressionVersions ?? 0}
-                hint={`${stats?.expressionStudents ?? 0} ${t.common.students}`}
+                hint={t.common.plural(
+                  stats?.expressionStudents ?? 0,
+                  t.common.student,
+                  t.common.students,
+                )}
                 icon={FileText}
                 tone="success"
               />

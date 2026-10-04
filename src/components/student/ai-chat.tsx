@@ -22,6 +22,8 @@ interface ChatPayload {
 interface AIChatProps {
   experimentId: string;
   initialMessages: AIMessage[];
+  /** Lets the parent keep its tab badge in step with the conversation. */
+  onCountChange?: (count: number) => void;
 }
 
 /**
@@ -29,7 +31,7 @@ interface AIChatProps {
  * Completely independent from the writing space: no question, no version of the
  * student's writing is ever sent here automatically.
  */
-export function AIChat({ experimentId, initialMessages }: AIChatProps) {
+export function AIChat({ experimentId, initialMessages, onCountChange }: AIChatProps) {
   const [messages, setMessages] = React.useState<AIMessage[]>(initialMessages);
   const [draft, setDraft] = React.useState('');
   const [pending, setPending] = React.useState(false);
@@ -40,6 +42,11 @@ export function AIChat({ experimentId, initialMessages }: AIChatProps) {
   React.useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages, experimentId]);
+
+  // The tab badge must follow the live conversation, not the server snapshot.
+  React.useEffect(() => {
+    onCountChange?.(messages.length);
+  }, [messages.length, onCountChange]);
 
   React.useEffect(() => {
     const node = scrollRef.current;
@@ -148,7 +155,7 @@ export function AIChat({ experimentId, initialMessages }: AIChatProps) {
                     </span>
                   )}
                   <span className="font-medium">
-                    {isStudent ? t.student.aiTitle : t.students.assistant}
+                    {isStudent ? t.student.aiAuthorStudent : t.student.aiAuthor}
                   </span>
                   <DateTime value={message.createdAt} className="tabular-nums" />
                   {isStudent ? (

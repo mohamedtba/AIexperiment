@@ -128,11 +128,19 @@ export default async function AdminStudentsPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <Badge variant={student.activity.aiMessages > 0 ? 'ai' : 'neutral'}>
                         <Bot className="h-3 w-3" aria-hidden />
-                        {student.activity.aiMessages} {t.common.messages}
+                        {t.common.plural(
+                          student.activity.aiMessages,
+                          t.common.message,
+                          t.common.messages,
+                        )}
                       </Badge>
                       <Badge variant={student.activity.expressionVersions > 0 ? 'success' : 'neutral'}>
                         <FileText className="h-3 w-3" aria-hidden />
-                        {student.activity.expressionVersions} {t.common.versions}
+                        {t.common.plural(
+                          student.activity.expressionVersions,
+                          t.common.version,
+                          t.common.versions,
+                        )}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
                         {t.students.lastActivity} :{' '}

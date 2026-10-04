@@ -30,13 +30,24 @@ export const common = {
   optional: 'facultatif',
   required: 'obligatoire',
   characters: 'caractères',
+  character: 'caractère',
   words: 'mots',
+  word: 'mot',
   versions: 'versions',
+  version: 'version',
   messages: 'messages',
+  message: 'message',
   students: 'étudiants',
   student: 'étudiant',
   emptyState: 'Aucune donnée pour le moment.',
   error: 'Erreur',
+
+  /**
+   * French plural: "1 version" but "2 versions". `singular` and `plural` hold
+   * the noun alone, so they can also be used inside a longer sentence.
+   */
+  plural: (count: number, singular: string, plural: string) =>
+    `${count} ${count > 1 ? plural : singular}`,
 } as const;
 
 export const nav = {
@@ -85,6 +96,7 @@ export const admin = {
   cardActiveExperiment: 'Expérience active',
   cardStudents: 'Étudiants',
   cardAIUsers: 'Utilisateurs de l’IA',
+  cardAIUser: 'Utilisateur de l’IA',
   cardExpressions: 'Expressions envoyées',
   cardAIUsersHint: 'ont utilisé l’assistant',
   cardExpressionsHint: 'versions déposées',
@@ -241,6 +253,8 @@ export const student = {
   questionTitle: 'Question du jour',
   questionHint: 'À traiter dans les deux espaces ci-dessous.',
   aiTitle: 'Assistant IA',
+  aiAuthor: 'Assistant IA',
+  aiAuthorStudent: 'Vous',
   aiSubtitle:
     'Posez vos questions librement. Cet espace est indépendant de votre expression écrite.',
   aiPlaceholder: 'Écrivez votre message à l’assistant…',

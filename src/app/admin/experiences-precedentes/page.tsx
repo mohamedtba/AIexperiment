@@ -71,8 +71,17 @@ export default async function PreviousExperimentsPage() {
                         </span>
                         <span>
                           {t.experiments.participants} : {stat?.participants ?? 0} ·{' '}
-                          {stat?.aiMessages ?? 0} {t.common.messages} ·{' '}
-                          {stat?.expressionVersions ?? 0} {t.common.versions}
+                          {t.common.plural(
+                            stat?.aiMessages ?? 0,
+                            t.common.message,
+                            t.common.messages,
+                          )}{' '}
+                          ·{' '}
+                          {t.common.plural(
+                            stat?.expressionVersions ?? 0,
+                            t.common.version,
+                            t.common.versions,
+                          )}
                         </span>
                       </p>
                     </div>

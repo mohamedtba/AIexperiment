@@ -38,6 +38,10 @@ export function StudentWorkspace({
   const router = useRouter();
   const [tab, setTab] = React.useState<WorkspaceTab>('ai');
   const [suspended, setSuspended] = React.useState(false);
+  // Kept in state so the badge reflects the live conversation, not the snapshot
+  // rendered on the server.
+  const [messageCount, setMessageCount] = React.useState(initialMessages.length);
+  const [versionCount, setVersionCount] = React.useState(initialVersions.length);
 
   // Detects immediately that the administrator suspended the access:
   // the student session is then revoked and the interface shows the message.
@@ -99,7 +103,7 @@ export function StudentWorkspace({
           onClick={() => setTab('ai')}
           icon={<Bot className="h-4 w-4" aria-hidden />}
           label={t.student.aiOpen}
-          count={initialMessages.length}
+          count={messageCount}
           activeClassName="text-ai"
         />
         <TabButton
@@ -107,7 +111,7 @@ export function StudentWorkspace({
           onClick={() => setTab('expression')}
           icon={<FileText className="h-4 w-4" aria-hidden />}
           label={t.student.switchToExpression}
-          count={initialVersions.length}
+          count={versionCount}
           activeClassName="text-success"
         />
       </div>
@@ -130,6 +134,7 @@ export function StudentWorkspace({
           <AIChat
             experimentId={experiment.id}
             initialMessages={initialMessages}
+            onCountChange={setMessageCount}
           />
         </section>
       ) : (
@@ -140,6 +145,7 @@ export function StudentWorkspace({
           <ExpressionPanel
             experimentId={experiment.id}
             initialVersions={initialVersions}
+            onCountChange={setVersionCount}
           />
         </section>
       )}

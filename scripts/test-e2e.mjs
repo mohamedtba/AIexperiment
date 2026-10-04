@@ -249,6 +249,8 @@ async function run() {
 
     await runTests();
     await checkNoSecretExposure();
+    await checkConversationLabels();
+    await checkFrenchPlurals();
     await checkConnectionResilience();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
@@ -1206,6 +1208,111 @@ async function checkConnectionResilience() {
       'Le service reste disponible après une rafale de requêtes',
       healthy === responses.length,
       `${healthy}/${responses.length} réponses « base de donnees ok »`,
+    );
+  }
+}
+
+/**
+ * 18. La conversation must tell the two speakers apart.
+ *
+ * The student's own message once reused the panel title ("Assistant IA"), so
+ * both sides of the conversation appeared to come from the AI.
+ */
+async function checkConversationLabels() {
+  group('18. Auteurs de la conversation');
+  {
+    const dictionary = await readSource('src/i18n/dictionaries/fr.ts');
+    const label = (key) => {
+      const found = dictionary.match(new RegExp(`${key}:\\s*'([^']+)'`));
+      return found ? found[1] : null;
+    };
+
+    const ai = label('aiAuthor');
+    const etudiant = label('aiAuthorStudent');
+    check(
+      'Les deux auteurs ont des libellés distincts',
+      Boolean(ai) && Boolean(etudiant) && ai !== etudiant,
+      `IA « ${ai} » / élève « ${etudiant} »`,
+    );
+
+    const chat = await readSource('src/components/student/ai-chat.tsx');
+    check(
+      'Le message de l’élève est attribué à l’élève',
+      /isStudent \? t\.student\.aiAuthorStudent : t\.student\.aiAuthor/.test(chat),
+      'ai-chat.tsx',
+    );
+
+    // The admin transcript must stay consistent with the student view.
+    const transcript = await readSource('src/components/shared/conversation-transcript.tsx');
+    check(
+      'La vue administrateur distingue aussi les deux auteurs',
+      /isStudent \? t\.students\.you : t\.students\.assistant/.test(transcript),
+      'conversation-transcript.tsx',
+    );
+  }
+}
+
+/**
+ * 19. Accords au singulier dans l'interface française.
+ *
+ * French requires "1 message" but "2 messages". Every counted noun therefore
+ * needs its singular, and no screen may interpolate a count next to a
+ * plural-only noun.
+ */
+async function checkFrenchPlurals() {
+  group('19. Accords français');
+  {
+    const dictionary = await readSource('src/i18n/dictionaries/fr.ts');
+    const entry = (key) => {
+      const found = dictionary.match(new RegExp(`${key}:\\s*'([^']+)'`));
+      return found ? found[1] : null;
+    };
+
+    check('Le helper de pluriel est disponible', /plural:\s*\(count/.test(dictionary), 't.common.plural');
+
+    const paires = [
+      ['versions', 'version'],
+      ['messages', 'message'],
+      ['students', 'student'],
+      ['words', 'word'],
+    ];
+    const manquants = paires
+      .filter(([, singulier]) => !entry(singulier))
+      .map(([, singulier]) => singulier);
+
+    check(
+      'Chaque nom dénombré possède son singulier',
+      manquants.length === 0,
+      manquants.length
+        ? `singuliers manquants : ${manquants.join(', ')}`
+        : `${paires.length} paires vérifiées`,
+    );
+
+    const composants = [
+      'src/app/admin/page.tsx',
+      'src/app/admin/etudiants/page.tsx',
+      'src/app/admin/experience/page.tsx',
+      'src/app/admin/experiences-precedentes/page.tsx',
+      'src/app/admin/experiences-precedentes/[id]/page.tsx',
+      'src/components/student/expression-panel.tsx',
+      'src/components/shared/expression-versions-list.tsx',
+    ];
+    const fautifs = [];
+    for (const fichier of composants) {
+      const source = await readSource(fichier);
+      for (const pluriel of ['versions', 'messages', 'students', 'words']) {
+        if (
+          new RegExp(`\\}\\s*\\{?\\s*t\\.common\\.${pluriel}\\b`).test(source) ||
+          new RegExp(`\\}\\s*\\$\\{t\\.common\\.${pluriel}\\b`).test(source)
+        ) {
+          fautifs.push(`${fichier} → t.common.${pluriel}`);
+        }
+      }
+    }
+    check(
+      'Aucun compteur n’affiche un nom au pluriel après un nombre',
+      fautifs.length === 0,
+      fautifs.length ? fautifs.join(', ') : `${composants.length} fichiers analysés`,
     );
   }
 }

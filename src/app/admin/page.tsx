@@ -123,15 +123,19 @@ export default async function AdminDashboardPage() {
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" aria-hidden />
-                  {stats?.participants ?? 0} {t.common.students}
+                  {t.common.plural(stats?.participants ?? 0, t.common.student, t.common.students)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Bot className="h-3.5 w-3.5" aria-hidden />
-                  {stats?.aiMessages ?? 0} {t.common.messages}
+                  {t.common.plural(stats?.aiMessages ?? 0, t.common.message, t.common.messages)}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <FileText className="h-3.5 w-3.5" aria-hidden />
-                  {stats?.expressionVersions ?? 0} {t.common.versions}
+                  {t.common.plural(
+                    stats?.expressionVersions ?? 0,
+                    t.common.version,
+                    t.common.versions,
+                  )}
                 </span>
               </div>
               <Button asChild variant="outline" size="sm">

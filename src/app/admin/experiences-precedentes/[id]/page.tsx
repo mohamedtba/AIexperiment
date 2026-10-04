@@ -74,8 +74,8 @@ export default async function ExperimentDetailPage({
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t.experiments.statsTitle}>
         <StatCard label={t.experiments.participants} value={stats.participants} icon={Users} tone="neutral" />
-        <StatCard label={t.common.messages} value={stats.aiMessages} hint={`${stats.aiStudents} ${t.admin.cardAIUsers}`} icon={MessageSquare} tone="ai" />
-        <StatCard label={t.common.versions} value={stats.expressionVersions} hint={`${stats.expressionStudents} ${t.common.students}`} icon={FileText} tone="success" />
+        <StatCard label={t.common.messages} value={stats.aiMessages} hint={t.common.plural(stats.aiStudents, t.admin.cardAIUser, t.admin.cardAIUsers)} icon={MessageSquare} tone="ai" />
+        <StatCard label={t.common.versions} value={stats.expressionVersions} hint={t.common.plural(stats.expressionStudents, t.common.student, t.common.students)} icon={FileText} tone="success" />
         <StatCard label={t.admin.cardAIUsers} value={stats.aiStudents} icon={Bot} tone="primary" />
       </section>
 
@@ -102,11 +102,19 @@ export default async function ExperimentDetailPage({
                       <span className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
                           <Bot className="h-3.5 w-3.5 text-ai" aria-hidden />
-                          {participant.aiMessages} {t.common.messages}
+                          {t.common.plural(
+                            participant.aiMessages,
+                            t.common.message,
+                            t.common.messages,
+                          )}
                         </span>
                         <span className="inline-flex items-center gap-1.5">
                           <FileText className="h-3.5 w-3.5 text-success" aria-hidden />
-                          {participant.expressionVersions} {t.common.versions}
+                          {t.common.plural(
+                            participant.expressionVersions,
+                            t.common.version,
+                            t.common.versions,
+                          )}
                         </span>
                         <span>
                           {t.students.lastActivity} :{' '}

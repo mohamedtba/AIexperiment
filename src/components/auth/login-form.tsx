@@ -161,7 +161,11 @@ export function LoginForm() {
           </Alert>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {/* method="post" is a safety net: if the page has not hydrated yet (slow
+            network, JavaScript blocked), the browser must never fall back to a
+            GET, which would put the password in the URL, the history and the
+            server logs. */}
+        <form method="post" onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="username">{t.auth.username}</Label>
             <Input

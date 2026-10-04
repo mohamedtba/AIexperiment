@@ -18,6 +18,8 @@ const t = getDictionary();
 interface ExpressionPanelProps {
   experimentId: string;
   initialVersions: ExpressionVersion[];
+  /** Lets the parent keep its tab badge in step with the versions submitted. */
+  onCountChange?: (count: number) => void;
 }
 
 /**
@@ -26,7 +28,11 @@ interface ExpressionPanelProps {
  * nor deleted. "Modifier" loads the latest version in the editor and submits a
  * brand new version.
  */
-export function ExpressionPanel({ experimentId, initialVersions }: ExpressionPanelProps) {
+export function ExpressionPanel({
+  experimentId,
+  initialVersions,
+  onCountChange,
+}: ExpressionPanelProps) {
   const [versions, setVersions] = React.useState<ExpressionVersion[]>(initialVersions);
   const [draft, setDraft] = React.useState('');
   const [editingFrom, setEditingFrom] = React.useState<number | null>(null);
@@ -38,6 +44,11 @@ export function ExpressionPanel({ experimentId, initialVersions }: ExpressionPan
   React.useEffect(() => {
     setVersions(initialVersions);
   }, [initialVersions, experimentId]);
+
+  // The tab badge must follow the live versions, not the server snapshot.
+  React.useEffect(() => {
+    onCountChange?.(versions.length);
+  }, [versions.length, onCountChange]);
 
   const latest = versions.at(-1) ?? null;
 
@@ -177,8 +188,8 @@ export function ExpressionPanel({ experimentId, initialVersions }: ExpressionPan
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground tabular-nums">
-            {countWords(draft)} {t.common.words} · {draft.length}/5000{' '}
-            {t.common.characters}
+            {t.common.plural(countWords(draft), t.common.word, t.common.words)} ·{' '}
+            {draft.length}/5000 {t.common.characters}
           </span>
 
           <div className="flex items-center gap-2">
@@ -206,7 +217,7 @@ export function ExpressionPanel({ experimentId, initialVersions }: ExpressionPan
         <h3 className="text-sm font-semibold">
           {t.student.expressionTitle}
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {versions.length} {t.common.versions}
+            {t.common.plural(versions.length, t.common.version, t.common.versions)}
           </span>
         </h3>
 
@@ -252,8 +263,12 @@ export function ExpressionPanel({ experimentId, initialVersions }: ExpressionPan
 
                     <footer className="mt-3 flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">
-                        {countWords(version.content)} {t.common.words} · {version.content.length}{' '}
-                        {t.common.characters}
+                        {t.common.plural(
+                          countWords(version.content),
+                          t.common.word,
+                          t.common.words,
+                        )}{' '}
+                        · {version.content.length} {t.common.characters}
                       </span>
                       {isLatest ? (
                         <Button

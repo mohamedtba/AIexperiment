@@ -54,8 +54,8 @@ export function ExpressionVersionsList({
                 {version.content}
               </p>
               <footer className="mt-2 text-xs text-muted-foreground">
-                {countWords(version.content)} {t.common.words} · {version.content.length}{' '}
-                {t.common.characters}
+                {t.common.plural(countWords(version.content), t.common.word, t.common.words)} ·{' '}
+                {version.content.length} {t.common.characters}
               </footer>
             </article>
           </li>
