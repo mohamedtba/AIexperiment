@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, GraduationCap, KeyRound, LogIn, ShieldCheck } from 'lucide-react';
+import { Bot, GraduationCap, KeyRound, LogIn, ServerCrash, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,23 +28,35 @@ export function LoginForm() {
   const [loading, setLoading] = React.useState(false);
   const [status, setStatus] = React.useState<{
     studentAccessEnabled: boolean | null;
-  }>({ studentAccessEnabled: null });
+    database: 'ok' | 'error' | null;
+  }>({ studentAccessEnabled: null, database: null });
 
   React.useEffect(() => {
     let active = true;
     fetch('/api/system/status', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { studentAccessEnabled?: boolean } | null) => {
-        if (active && data && typeof data.studentAccessEnabled === 'boolean') {
-          setStatus({ studentAccessEnabled: data.studentAccessEnabled });
-        }
-      })
+      .then(
+        (
+          data: {
+            studentAccessEnabled?: boolean | null;
+            database?: 'ok' | 'error';
+          } | null,
+        ) => {
+          if (!active || !data) return;
+          setStatus({
+            studentAccessEnabled:
+              typeof data.studentAccessEnabled === 'boolean' ? data.studentAccessEnabled : null,
+            database: data.database ?? null,
+          });
+        },
+      )
       .catch(() => undefined);
     return () => {
       active = false;
     };
   }, []);
 
+  const databaseDown = status.database === 'error';
   const accessDisabled = status.studentAccessEnabled === false;
   const isAdmin = role === 'admin';
 
@@ -133,7 +145,11 @@ export function LoginForm() {
           })}
         </div>
 
-        {accessDisabled && !isAdmin ? (
+        {databaseDown ? (
+          <Alert tone="warning" className="mb-4" icon={<ServerCrash className="h-4 w-4" />}>
+            {ERROR_MESSAGES.DATABASE_UNAVAILABLE}
+          </Alert>
+        ) : accessDisabled && !isAdmin ? (
           <Alert tone="warning" className="mb-4" icon={<ShieldCheck className="h-4 w-4" />}>
             {ERROR_MESSAGES.STUDENT_ACCESS_DISABLED}
           </Alert>

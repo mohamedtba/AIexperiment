@@ -46,6 +46,8 @@ export const ERROR_MESSAGES = {
   // Générique
   VALIDATION_ERROR: 'Certaines informations sont invalides. Veuillez vérifier le formulaire.',
   RATE_LIMIT: 'Trop de requêtes. Veuillez patienter un instant.',
+  DATABASE_UNAVAILABLE:
+    'Connexion à la base de données impossible. Vérifiez la variable DATABASE_URL et les identifiants MongoDB.',
   SERVER_ERROR: 'Une erreur est survenue. Veuillez réessayer.',
   NOT_FOUND: "Cette ressource n'existe pas.",
 } as const;
@@ -89,8 +91,7 @@ const ZOD_ISSUE_FALLBACKS: Record<string, string> = {
   unrecognized_keys: 'Données non autorisées : certains champs sont inattendus.',
 };
 
-/** First user facing message of a ZodError, guaranteed to be French. */
-export function zodIssueMessage(error: unknown): string {
+/** First user facing message of a ZodError, guaranteed to be French. */export function zodIssueMessage(error: unknown): string {
   const issues = (error as { issues?: Array<{ code?: string; message?: string }> })?.issues;
   const first = issues?.[0];
   const explicit = typeof first?.message === 'string' ? first.message.trim() : '';
@@ -130,6 +131,8 @@ function defaultStatusForCode(code: ErrorCode): number {
     case 'SERVER_ERROR':
     case 'AI_GENERIC_ERROR':
       return 500;
+    case 'DATABASE_UNAVAILABLE':
+      return 503;
     default:
       return 400;
   }
@@ -137,6 +140,37 @@ function defaultStatusForCode(code: ErrorCode): number {
 
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
+}
+
+/**
+ * Detects a MongoDB failure (wrong credentials, unreachable host, IP not
+ * allowed, invalid connection string…). These are deployment problems, not user
+ * mistakes, so they get an explicit message instead of a generic error.
+ */
+export function isDatabaseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const name = 'name' in error ? String((error as { name?: unknown }).name ?? '') : '';
+  if (name.startsWith('Mongo')) return true;
+
+  const code = 'code' in error ? (error as { code?: unknown }).code : undefined;
+  // 18 = AuthenticationFailed, 8000 = AtlasError, 13 = Unauthorized
+  if (code === 18 || code === 13 || code === '18' || code === '13' || code === 8000) {
+    return true;
+  }
+
+  const message = 'message' in error ? String((error as { message?: unknown }).message ?? '') : '';
+  return [
+    'Authentication failed',
+    'bad auth',
+    'Server selection timed out',
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'self-signed certificate',
+    'IP address not allowed',
+    'not authorized on admin',
+    'MongoParseError',
+  ].some((needle) => message.includes(needle));
 }
 
 /** Convert any thrown value into a French message + HTTP status. */
@@ -170,6 +204,22 @@ export function toErrorResponse(error: unknown): {
       status: 409,
       body: {
         error: { code: 'USERNAME_TAKEN', message: ERROR_MESSAGES.USERNAME_TAKEN },
+      },
+    };
+  }
+
+  if (isDatabaseError(error)) {
+    // Deployment issue (DATABASE_URL, credentials, IP allowlist, DNS…): the
+    // message points the administrator to the configuration instead of showing
+    // a generic failure.
+    console.error('[base de donnees injoignable]', message);
+    return {
+      status: 503,
+      body: {
+        error: {
+          code: 'DATABASE_UNAVAILABLE',
+          message: ERROR_MESSAGES.DATABASE_UNAVAILABLE,
+        },
       },
     };
   }
