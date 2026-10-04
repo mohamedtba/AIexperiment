@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "seed:admin": "node --env-file-if-exists=.env scripts/seed-admin.mjs",
     "db:indexes": "node --env-file-if-exists=.env scripts/ensure-indexes.mjs",
+    "db:local": "node scripts/dev-mongo.mjs",
     "test:e2e": "node scripts/test-e2e.mjs"
   },
   "dependencies": {

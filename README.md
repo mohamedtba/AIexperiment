@@ -184,6 +184,29 @@ npm run start     # serve the production build
 npm run test:e2e  # full integration suite (boots its own server + database)
 ```
 
+### Running without Atlas (optional)
+
+A local MongoDB can be started for development without any Atlas cluster. The data
+is stored in `.mongo-data/` (git-ignored) and survives restarts.
+
+```bash
+# terminal 1
+npm run db:local
+# DATABASE_URL=mongodb://127.0.0.1:27017/atelier_ecriture
+
+# terminal 2 (.env)
+DATABASE_URL=mongodb://127.0.0.1:27017/atelier_ecriture
+npm run seed:admin
+npm run dev
+```
+
+Stop the database with `Ctrl+C`; delete `.mongo-data/` to start from scratch.
+Keep the Atlas URL in a comment in `.env` so you can switch back in one line:
+
+```
+# DATABASE_URL=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/atelier_ecriture
+```
+
 ---
 
 ## Production build
