@@ -253,6 +253,7 @@ async function run() {
     await checkFrenchPlurals();
     await checkConnectionResilience();
     await checkRevokedSessionRedirects();
+    await checkSingleScreenWorkspace();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
     results.push({ group: 'Harnais', label: 'Exécution du test', ok: false, detail: String(error?.message ?? error) });
@@ -1445,6 +1446,85 @@ async function followRedirects(client, startPath, maxHops) {
     hops += 1;
   }
   return { hops, finalPath: `${path} (boucle)` };
+}
+
+/**
+ * 21. The two areas live on one single screen.
+ *
+ * The Assistant IA and the Expression écrite used to sit behind two tabs, so a
+ * student had to switch back and forth to reason with the AI and then write.
+ * Both must now be delivered by the same HTML document, without any tab switcher.
+ */
+async function checkSingleScreenWorkspace() {
+  group('21. Espace unique (IA + Expression sur la même page)');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+  await admin.postJson('/api/admin/experiments', { question: QUESTION_3 });
+
+  const account = await admin.postJson('/api/admin/students', {});
+  const student = createClient();
+  await student.postJson('/api/auth/student/login', {
+    username: account.data?.student?.username,
+    password: account.data?.password,
+  });
+
+  const { response, data } = await student.get('/etudiant');
+  const page = data?.html ?? '';
+
+  check(
+    'Espace étudiant servi en une seule page',
+    response.status === 200,
+    `HTTP ${response.status}`,
+  );
+
+  const zoneIA = page.indexOf('aria-label="Assistant IA"');
+  const zoneExpression = page.indexOf('aria-label="Expression écrite');
+  check(
+    'Les deux espaces sont livrés dans le même document',
+    zoneIA !== -1 && zoneExpression !== -1 && zoneIA < zoneExpression,
+    `IA à ${zoneIA}, Expression à ${zoneExpression}`,
+  );
+
+  // Both inputs must be present at the same time: that is the whole point.
+  check(
+    'Le champ de discussion et l’éditeur sont affichés ensemble',
+    page.includes('name="message"') && page.includes('name="expression"'),
+    'deux zones de saisie visibles',
+  );
+
+  check(
+    'Aucun sélecteur d’onglets ne subsiste',
+    !page.includes('role="tablist"') && !page.includes('Espaces de travail'),
+    'plus de navigation entre les espaces',
+  );
+
+  check(
+    'Les deux boutons d’envoi sont disponibles',
+    (page.match(/>\s*Envoyer\s*</g) ?? []).length >= 2,
+    'un envoi par espace',
+  );
+
+  // The privacy guarantee is explicit on screen and structurally enforced.
+  check(
+    'L’indépendance des deux espaces reste annoncée',
+    page.includes('n’est jamais transmise à l’Assistant IA'),
+  );
+
+  const source = await readSource('src/components/student/student-workspace.tsx');
+  check(
+    'Les deux espaces sont côte à côte sur grand écran',
+    /lg:grid-cols-2/.test(source),
+    'grid responsive, empilés sur mobile',
+  );
+  check(
+    'Aucun état d’onglet dans l’espace de travail',
+    !/WorkspaceTab|setTab|role="tab"/.test(source),
+    'student-workspace.tsx',
+  );
 }
 
 /** Reads a source file of the project (used by the resilience checks). */

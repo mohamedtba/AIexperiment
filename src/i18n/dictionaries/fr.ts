@@ -251,7 +251,7 @@ export const student = {
   dashboardTitle: 'Expérience en cours',
   logout: 'Déconnexion',
   questionTitle: 'Question du jour',
-  questionHint: 'À traiter dans les deux espaces ci-dessous.',
+  questionHint: 'Échangez avec l’Assistant IA et rédigez votre expression ci-dessous.',
   aiTitle: 'Assistant IA',
   aiAuthor: 'Assistant IA',
   aiAuthorStudent: 'Vous',
@@ -266,9 +266,8 @@ export const student = {
     'Vous pouvez demander une explication, des idées, des exemples, la correction d’un texte, ou même une réponse complète.',
   aiIndependentNote:
     'Votre expression écrite n’est jamais transmise à l’Assistant IA.',
-  aiOpen: 'Assistant IA',
-  aiBadge: 'espace IA',
   expressionTitle: 'Expression écrite',
+  expressionHistory: 'Historique des versions',
   expressionSubtitle:
     'Rédigez votre texte puis envoyez-le. Chaque envoi crée une nouvelle version conservée.',
   expressionPlaceholder:
@@ -292,9 +291,6 @@ export const student = {
     'Nouvelle version créée à partir de la version {n}.',
   wordCount: '{n} mots',
   charCount: '{n} caractères',
-  tabsLabel: 'Espaces de travail',
-  switchToAI: 'Assistant IA',
-  switchToExpression: 'Expression écrite',
   loadingWorkspace: 'Chargement de l’expérience…',
   noExperimentTitle: 'Aucune expérience en cours',
   noExperimentBody:

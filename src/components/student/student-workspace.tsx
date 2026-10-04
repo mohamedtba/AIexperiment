@@ -8,12 +8,9 @@ import { ExpressionPanel } from '@/components/student/expression-panel';
 import { QuestionCard } from '@/components/student/question-card';
 import { Alert } from '@/components/ui/alert';
 import { getDictionary } from '@/i18n';
-import { cn } from '@/lib/utils';
 import type { AIMessage, ExpressionVersion } from '@/types';
 
 const t = getDictionary();
-
-type WorkspaceTab = 'ai' | 'expression';
 
 interface StudentWorkspaceProps {
   experiment: {
@@ -27,8 +24,12 @@ interface StudentWorkspaceProps {
 }
 
 /**
- * Student workspace: the question of the day on top, then two completely
- * independent areas (Assistant IA / Expression écrite).
+ * Student workspace.
+ *
+ * One single screen: the question of the day on top, then the conversation with
+ * the Assistant IA and the Expression écrite side by side on a large screen and
+ * one after the other on a phone. The student never has to switch tabs, and the
+ * two areas stay strictly independent — no writing is ever sent to the AI.
  */
 export function StudentWorkspace({
   experiment,
@@ -36,9 +37,8 @@ export function StudentWorkspace({
   initialVersions,
 }: StudentWorkspaceProps) {
   const router = useRouter();
-  const [tab, setTab] = React.useState<WorkspaceTab>('ai');
   const [suspended, setSuspended] = React.useState(false);
-  // Kept in state so the badge reflects the live conversation, not the snapshot
+  // Kept in state so the counters follow the live data, not the snapshot
   // rendered on the server.
   const [messageCount, setMessageCount] = React.useState(initialMessages.length);
   const [versionCount, setVersionCount] = React.useState(initialVersions.length);
@@ -92,105 +92,59 @@ export function StudentWorkspace({
         </Alert>
       ) : null}
 
-      {/* Sélecteur d'espace */}
-      <div
-        role="tablist"
-        aria-label={t.student.tabsLabel}
-        className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted p-1"
-      >
-        <TabButton
-          active={tab === 'ai'}
-          onClick={() => setTab('ai')}
-          icon={<Bot className="h-4 w-4" aria-hidden />}
-          label={t.student.aiOpen}
-          count={messageCount}
-          activeClassName="text-ai"
-        />
-        <TabButton
-          active={tab === 'expression'}
-          onClick={() => setTab('expression')}
-          icon={<FileText className="h-4 w-4" aria-hidden />}
-          label={t.student.switchToExpression}
-          count={versionCount}
-          activeClassName="text-success"
-        />
-      </div>
-
-      {tab === 'ai' ? (
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        {/* Espace 1 — Assistant IA */}
         <section
-          role="tabpanel"
           aria-label={t.student.aiTitle}
-          className="space-y-3 rounded-lg border border-ai/20 bg-ai-soft/30 p-3 sm:p-4"
+          className="flex flex-col gap-3 rounded-lg border border-ai/20 bg-ai-soft/30 p-3 sm:p-4"
         >
           <header>
             <h2 className="flex items-center gap-2 text-sm font-semibold text-ai">
               <Bot className="h-4 w-4" aria-hidden />
-              {t.student.aiTitle}
+              <span className="truncate">{t.student.aiTitle}</span>
+              <CountBadge>{t.common.plural(messageCount, t.common.message, t.common.messages)}</CountBadge>
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {t.student.aiSubtitle}
             </p>
           </header>
+
           <AIChat
             experimentId={experiment.id}
             initialMessages={initialMessages}
             onCountChange={setMessageCount}
           />
         </section>
-      ) : (
-        <section role="tabpanel" aria-label={t.student.expressionTitle}>
-          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-            {t.student.expressionSubtitle}
-          </p>
+
+        {/* Espace 2 — Expression écrite */}
+        <section aria-label={t.student.expressionTitle} className="flex flex-col gap-3">
+          <header>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-success">
+              <FileText className="h-4 w-4" aria-hidden />
+              <span className="truncate">{t.student.expressionTitle}</span>
+              <CountBadge>{t.common.plural(versionCount, t.common.version, t.common.versions)}</CountBadge>
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t.student.expressionSubtitle}
+            </p>
+          </header>
+
           <ExpressionPanel
             experimentId={experiment.id}
             initialVersions={initialVersions}
             onCountChange={setVersionCount}
           />
         </section>
-      )}
+      </div>
     </div>
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label,
-  count,
-  activeClassName,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  activeClassName: string;
-}) {
+/** Live counter shown next to a section title ("1 message", "3 messages"). */
+function CountBadge({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
-        active
-          ? cn('bg-card shadow-sm', activeClassName)
-          : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {icon}
-      <span className="truncate">{label}</span>
-      <span
-        className={cn(
-          'rounded-full px-1.5 py-0.5 text-[11px] tabular-nums',
-          active ? cn('bg-muted', activeClassName) : 'bg-background text-muted-foreground',
-        )}
-      >
-        {count}
-      </span>
-    </button>
+    <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-normal tabular-nums text-muted-foreground">
+      {children}
+    </span>
   );
 }

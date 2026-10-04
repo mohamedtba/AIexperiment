@@ -145,11 +145,7 @@ export function ExpressionPanel({
         noValidate
         className="rounded-lg border border-border bg-card p-4 shadow-card sm:p-5"
       >
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <FileText className="h-4 w-4 text-success" aria-hidden />
-            {t.student.expressionTitle}
-          </h3>
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
           {editingFrom !== null ? (
             <Badge variant="warning">
               {t.student.editingFrom.replace('{n}', String(editingFrom))}
@@ -214,13 +210,8 @@ export function ExpressionPanel({
       </form>
 
       {/* Historique chronologique */}
-      <section aria-label={t.student.expressionTitle} className="space-y-3">
-        <h3 className="text-sm font-semibold">
-          {t.student.expressionTitle}
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {t.common.plural(versions.length, t.common.version, t.common.versions)}
-          </span>
-        </h3>
+      <section aria-label={t.student.expressionHistory} className="space-y-3">
+        <h3 className="text-sm font-semibold">{t.student.expressionHistory}</h3>
 
         {versions.length === 0 ? (
           <EmptyState
