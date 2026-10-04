@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { AppError } from '@/lib/errors';
+import { env } from '../env';
 import { adminRepository, studentRepository } from '../db/repositories/accounts';
 import { hashStudentPassword, verifyPassword } from '../auth/password';
 import { clientIp, rateLimit } from '../auth/rate-limit';
@@ -25,7 +26,8 @@ export async function loginStudent(
   request: Request,
 ): Promise<StudentLoginResult> {
   const ip = clientIp(request);
-  const limit = rateLimit(`login:student:${ip}`, 12, 60_000);
+  const attempts = env.loginAttemptsPerMinute;
+  const limit = rateLimit(`login:student:${ip}`, attempts, 60_000);
   if (!limit.allowed) throw new AppError('LOGIN_RATE_LIMIT', 429);
 
   const access = await getAccessSettings();
@@ -123,7 +125,8 @@ export async function loginAdmin(
   request: Request,
 ): Promise<AdminLoginResult> {
   const ip = clientIp(request);
-  const limit = rateLimit(`login:admin:${ip}`, 8, 60_000);
+  const attempts = env.loginAttemptsPerMinute;
+  const limit = rateLimit(`login:admin:${ip}`, attempts, 60_000);
   if (!limit.allowed) throw new AppError('LOGIN_RATE_LIMIT', 429);
 
   const admin = await adminRepository.findByUsername(input.username);

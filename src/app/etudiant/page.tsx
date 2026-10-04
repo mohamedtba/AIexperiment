@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { getDictionary } from '@/i18n';
 import { getSession } from '@/server/auth/session';
 import { getStudentWorkspace } from '@/server/services/studentExperienceService';
+import { hasAnyExperiment } from '@/server/services/experimentService';
 
 const t = getDictionary();
 
@@ -18,13 +19,21 @@ export default async function StudentPage() {
   const workspace = await getStudentWorkspace(session?.userId ?? '').catch(() => null);
 
   if (!workspace) {
+    // "Not started yet" and "stopped by the administrator" are different
+    // situations for the student, so they must not read the same sentence.
+    const everStarted = await hasAnyExperiment().catch(() => false);
+
     return (
       <Card className="mt-6">
         <CardContent className="pt-5 sm:pt-6">
           <EmptyState
             icon={<Clock className="h-6 w-6" />}
-            title={t.student.noExperimentTitle}
-            description={t.student.noExperimentBody}
+            title={
+              everStarted ? t.student.experimentStoppedTitle : t.student.noExperimentTitle
+            }
+            description={
+              everStarted ? t.student.experimentStoppedBody : t.student.noExperimentBody
+            }
             action={
               <Button asChild variant="outline" size="sm">
                 <a href="/etudiant">{t.common.retry}</a>

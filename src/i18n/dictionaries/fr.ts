@@ -196,6 +196,13 @@ export const experiments = {
   confirmArchiveBody:
     'L’expérience actuelle sera archivée. Ses données resteront accessibles dans « Expériences précédentes ». Les étudiants verront immédiatement la nouvelle question et leur conversation IA repartira à zéro.',
   confirmStart: 'Démarrer',
+  stop: 'Arrêter l’expérience',
+  confirmStopTitle: 'Arrêter l’expérience en cours ?',
+  confirmStopBody:
+    'Les étudiants verront immédiatement l’écran de fin d’expérience : ils ne pourront plus envoyer de message à l’Assistant IA ni déposer de version. L’expérience sera archivée avec la totalité des conversations et des expressions écrites, que vous pourrez consulter à tout moment dans « Expériences précédentes ».',
+  confirmStop: 'Arrêter l’expérience',
+  stopped: 'Expérience arrêtée et archivée.',
+  nothingToStop: 'Aucune expérience n’était en cours.',
   statusActive: 'En cours',
   statusArchived: 'Archivée',
   startedAt: 'Démarrée le',
@@ -295,6 +302,9 @@ export const student = {
   noExperimentTitle: 'Aucune expérience en cours',
   noExperimentBody:
     'L’expérience n’a pas encore démarré. Revenez plus tard : la question du jour apparaîtra ici.',
+  experimentStoppedTitle: 'L’expérience est terminée',
+  experimentStoppedBody:
+    'Votre enseignant a arrêté l’expérience. Vos échanges avec l’Assistant IA et vos versions écrites restent conservés.',
   accessSuspendedTitle: 'Accès suspendu',
   accessSuspendedBody:
     'Le temps est écoulé. L’expérience est actuellement suspendue.',

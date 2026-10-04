@@ -19,7 +19,7 @@ export const ERROR_MESSAGES = {
 
   // Expérience
   NO_ACTIVE_EXPERIMENT:
-    "Aucune expérience n'est active pour le moment. Veuillez patienter.",
+    "Aucune expérience active : l’accès à l’Assistant IA et à l’expression écrite est fermé pour le moment.",
   EXPERIMENT_QUESTION_REQUIRED: 'Veuillez saisir une question pour la nouvelle expérience.',
   EXPERIMENT_ALREADY_ACTIVE: 'Une expérience est déjà active. Veuillez en archiver une.',
   EXPERIMENT_NOT_FOUND: "Cette expérience n'existe pas.",

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Bot, FileText, History, Users } from 'lucide-react';
 import { NewExperimentForm } from '@/components/admin/new-experiment-form';
+import { StopExperimentButton } from '@/components/admin/experiment-controls';
 import { StatCard } from '@/components/admin/stat-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,11 +48,14 @@ export default async function CurrentExperimentPage() {
                 {t.experiments.duration} {formatDurationFr(experiment.startedAt)}
               </CardDescription>
             </div>
-            <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-              <Link href={`/admin/experiences-precedentes/${experiment.id}`}>
-                {t.common.seeDetails}
-              </Link>
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <StopExperimentButton />
+              <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
+                <Link href={`/admin/experiences-precedentes/${experiment.id}`}>
+                  {t.common.seeDetails}
+                </Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <blockquote className="heading-serif rounded-lg border-l-[3px] border-primary bg-muted/50 px-4 py-4 text-lg leading-relaxed">
@@ -109,13 +113,18 @@ export default async function CurrentExperimentPage() {
               icon={<Bot className="h-6 w-6" />}
               title={t.admin.noExperimentTitle}
               description={t.admin.noExperimentBody}
+              action={
+                <Button asChild size="sm">
+                  <a href="#nouvelle-experience">{t.experiments.start}</a>
+                </Button>
+              }
             />
           </CardContent>
         </Card>
       )}
 
       {/* Nouvelle expérience */}
-      <Card>
+      <Card id="nouvelle-experience">
         <CardHeader>
           <CardTitle>{t.experiments.newTitle}</CardTitle>
           <CardDescription>{t.experiments.newIntro}</CardDescription>

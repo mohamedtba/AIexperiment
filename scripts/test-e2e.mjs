@@ -236,6 +236,9 @@ async function run() {
       GEMINI_BASE_URL: `http://127.0.0.1:${GEMINI_PORT}/v1beta`,
       GEMINI_MODEL: 'gemini-3.8-flash',
       SESSION_MAX_AGE: '3600',
+      // The whole suite shares one IP, so it would otherwise exhaust the
+      // production brake (12/minute) long before the last group runs.
+      LOGIN_ATTEMPTS_PER_MINUTE: '500',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -254,6 +257,8 @@ async function run() {
     await checkConnectionResilience();
     await checkRevokedSessionRedirects();
     await checkSingleScreenWorkspace();
+    await checkExperimentStartStop();
+    await checkLoginRateLimit();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
     results.push({ group: 'Harnais', label: 'Exécution du test', ok: false, detail: String(error?.message ?? error) });
@@ -1524,6 +1529,236 @@ async function checkSingleScreenWorkspace() {
     'Aucun état d’onglet dans l’espace de travail',
     !/WorkspaceTab|setTab|role="tab"/.test(source),
     'student-workspace.tsx',
+  );
+}
+
+/**
+ * 22. The administrator starts and stops the experiment with one button.
+ *
+ * Stopping must archive without ever deleting: the whole conversation and every
+ * written version stay readable in « Expériences précédentes », while students
+ * are locked out of both the AI and the editor.
+ */
+async function checkExperimentStartStop() {
+  group('22. Démarrage et arrêt de l’expérience');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+
+  const account = await admin.postJson('/api/admin/students', {});
+  check(
+    'Compte étudiant créé pour la vérification',
+    account.response.status === 201 && Boolean(account.data?.student?.username),
+    `${account.data?.student?.username ?? '—'} / ${account.data?.password ?? '—'}`,
+  );
+
+  const student = createClient();
+  const studentLogin = await student.postJson('/api/auth/student/login', {
+    username: account.data?.student?.username,
+    password: account.data?.password,
+  });
+  check(
+    'Connexion étudiante réussie',
+    studentLogin.response.status === 200,
+    `HTTP ${studentLogin.response.status} ${studentLogin.data?.error?.message ?? ''}`,
+  );
+
+  const started = await admin.postJson('/api/admin/experiments', { question: QUESTION_1 });
+  const experimentId = started.data?.experiment?.id;
+  check(
+    'Expérience démarrée',
+    started.response.status === 201 && started.data?.experiment?.status === 'ACTIVE',
+    `n°${started.data?.experiment?.sequence}`,
+  );
+
+  // The student works for a moment, so we can prove nothing is lost on stop.
+  const chat = await student.postJson('/api/student/ai/chat', { content: 'Une question avant l’arrêt' });
+  check('Message envoyé avant l’arrêt', chat.response.status === 200);
+
+  const expression = await student.postJson('/api/student/expressions', {
+    content: 'Une version écrite avant l’arrêt de l’expérience.',
+  });
+  check('Version déposée avant l’arrêt', expression.response.status === 201);
+
+  const beforeStop = await student.get('/etudiant');
+  check(
+    'Espace étudiant ouvert avant l’arrêt',
+    beforeStop.response.status === 200,
+    `HTTP ${beforeStop.response.status}`,
+  );
+
+  const stopped = await admin.postJson('/api/admin/experiments/stop', {});
+  check(
+    'Expérience arrêtée par l’administrateur',
+    stopped.response.status === 200 && stopped.data?.stopped?.status === 'ARCHIVED',
+    stopped.data?.stopped ? `archivée le ${stopped.data.stopped.archivedAt}` : 'rien à arrêter',
+  );
+  check(
+    'La date d’archivage est enregistrée',
+    Boolean(stopped.data?.stopped?.archivedAt),
+    stopped.data?.stopped?.archivedAt ?? '—',
+  );
+  check(
+    'L’expérience arrêtée est bien celle qui tournait',
+    stopped.data?.stopped?.id === experimentId,
+  );
+
+  // Idempotent: pressing the button twice must not fail.
+  const again = await admin.postJson('/api/admin/experiments/stop', {});
+  check(
+    'Arrêter deux fois reste sans effet',
+    again.response.status === 200 && again.data?.stopped === null,
+    `HTTP ${again.response.status}`,
+  );
+
+  const activeAfter = await admin.get('/api/admin/experiments');
+  check(
+    'Plus aucune expérience active',
+    activeAfter.data?.active === null,
+    activeAfter.data?.active ? `n°${activeAfter.data.active.sequence}` : 'aucune',
+  );
+
+  const archived = (activeAfter.data?.archived ?? []).find(
+    (item) => item.id === experimentId,
+  );
+  check(
+    'L’expérience apparaît dans les archives',
+    Boolean(archived) && archived.status === 'ARCHIVED',
+    archived ? `n°${archived.sequence}` : 'absente',
+  );
+
+  const chatBlocked = await student.postJson('/api/student/ai/chat', { content: 'encore ?' });
+  check(
+    'Envoi à l’IA refusé après l’arrêt (message en français)',
+    chatBlocked.response.status === 404 &&
+      chatBlocked.data?.error?.message ===
+        'Aucune expérience active : l’accès à l’Assistant IA et à l’expression écrite est fermé pour le moment.',
+    chatBlocked.data?.error?.message,
+  );
+
+  const expressionBlocked = await student.postJson('/api/student/expressions', {
+    content: 'Une tentative après l’arrêt.',
+  });
+  check('Dépôt d’une version refusé après l’arrêt', expressionBlocked.response.status === 404);
+
+  const screen = await student.get('/etudiant');
+  const html = screen.data?.html ?? '';
+  check(
+    'L’étudiant voit l’écran « expérience terminée »',
+    screen.response.status === 200 && html.includes('L’expérience est terminée'),
+    `HTTP ${screen.response.status}`,
+  );
+  check(
+    'L’étudiant ne voit pas le message « pas encore démarré »',
+    !html.includes('n’a pas encore démarré'),
+  );
+
+  // Everything written before the stop is still there.
+  const detail = await admin.get(`/api/admin/experiments/${experimentId}`);
+  const participants = detail.data?.participants ?? [];
+  check(
+    'Les données de l’arrêt sont conservées',
+    participants.length === 1 &&
+      participants[0].aiMessages === 2 &&
+      participants[0].expressionVersions === 1,
+    participants.length
+      ? `${participants[0].aiMessages} messages, ${participants[0].expressionVersions} version`
+      : 'aucun participant',
+  );
+
+  // Restarting works and leaves exactly one active experiment.
+  const restarted = await admin.postJson('/api/admin/experiments', { question: QUESTION_2 });
+  check(
+    'Redémarrage possible après l’arrêt',
+    restarted.response.status === 201 && restarted.data?.experiment?.status === 'ACTIVE',
+    `n°${restarted.data?.experiment?.sequence}`,
+  );
+
+  const listing = await admin.get('/api/admin/experiments');
+  const actives = (listing.data?.archived ?? []).filter((item) => item.status === 'ACTIVE');
+  check(
+    'Une seule expérience active après redémarrage',
+    Boolean(listing.data?.active) && actives.length === 0,
+    `n°${listing.data?.active?.sequence}`,
+  );
+
+  const back = await student.get('/etudiant');
+  check(
+    'L’étudiant retrouve son espace',
+    back.response.status === 200,
+    `HTTP ${back.response.status}`,
+  );
+
+  const forbidden = await student.postJson('/api/admin/experiments/stop', {});
+  check('Un étudiant ne peut pas arrêter l’expérience', forbidden.response.status === 403);
+
+  const anonymous = createClient();
+  const anonymousStop = await anonymous.postJson('/api/admin/experiments/stop', {});
+  check(
+    'Un visiteur non connecté ne peut pas arrêter l’expérience',
+    anonymousStop.response.status === 401,
+    `HTTP ${anonymousStop.response.status}`,
+  );
+
+  const page = await readSource('src/app/admin/experience/page.tsx');
+  check(
+    'Le bouton d’arrêt est présent sur la page de l’expérience',
+    /StopExperimentButton/.test(page),
+    'src/app/admin/experience/page.tsx',
+  );
+}
+
+/**
+ * 23. The login brake must stay a real brake.
+ *
+ * The per-IP attempt limit became configurable so a whole class can log in
+ * together behind one school IP. It must never be silently dropped: the default
+ * has to stay low, and both login paths have to go through it.
+ */
+async function checkLoginRateLimit() {
+  group('23. Limite des tentatives de connexion');
+
+  const envSource = await readSource('src/server/env.ts');
+  check(
+    'La limite est configurable par variable d’environnement',
+    /loginAttemptsPerMinute/.test(envSource) && /LOGIN_ATTEMPTS_PER_MINUTE/.test(envSource),
+    'LOGIN_ATTEMPTS_PER_MINUTE',
+  );
+  check(
+    'La valeur par défaut reste basse (12 par minute)',
+    /:\s*12\s*;/.test(envSource.match(/get loginAttemptsPerMinute[\s\S]*?\n  },/)?.[0] ?? ''),
+    'protection contre le forcage brutal',
+  );
+
+  const authSource = await readSource('src/server/services/authService.ts');
+  const appels = [
+    ...authSource.matchAll(/rateLimit\(`login:(student|admin):\$\{ip\}`,\s*(\w+),\s*[\d_]+\)/g),
+  ];
+  check(
+    'Les deux chemins de connexion passent par la limite',
+    appels.length === 2 &&
+      new Set(appels.map((m) => m[1])).size === 2 &&
+      appels.every((m) => m[2] === 'attempts'),
+    'étudiant et administrateur',
+  );
+  check(
+    'La valeur vient de la configuration serveur',
+    (authSource.match(/= env\.loginAttemptsPerMinute;/g) ?? []).length === 2,
+    'env.loginAttemptsPerMinute',
+  );
+  check(
+    'Aucune limite codée en dur ne subsiste',
+    !/rateLimit\(`login:(student|admin)[^)]*,\s*\d+\s*,/.test(authSource),
+    'plus de « 12 » ou « 8 » figés dans le service',
+  );
+
+  const example = await readSource('.env.example');
+  check(
+    'La variable est documentée dans .env.example',
+    example.includes('LOGIN_ATTEMPTS_PER_MINUTE'),
   );
 }
 

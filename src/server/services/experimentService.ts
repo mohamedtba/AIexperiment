@@ -30,6 +30,28 @@ export async function startExperiment(question: string): Promise<Experiment> {
   return experimentRepository.startNew(question.trim());
 }
 
+/**
+ * Stops the running experiment, at the administrator's request.
+ *
+ * Nothing is ever deleted: the experiment becomes ARCHIVED and stays fully
+ * readable in « Expériences précédentes ». Students immediately see the
+ * end-of-experiment screen and can no longer send a message nor submit a
+ * version, which is exactly what `NO_ACTIVE_EXPERIMENT` already enforces.
+ *
+ * Returns null when no experiment was running, so the button is idempotent.
+ */
+export async function stopCurrentExperiment(): Promise<Experiment | null> {
+  return experimentRepository.stopActive();
+}
+
+/**
+ * True as soon as one experiment exists, whatever its status. Lets the student
+ * screen tell "not started yet" apart from "stopped by the administrator".
+ */
+export async function hasAnyExperiment(): Promise<boolean> {
+  return (await experimentRepository.count()) > 0;
+}
+
 export async function getExperimentStats(experimentId: string): Promise<ExperimentStats> {
   const [aiMessages, aiStudents, expressionVersions, expressionStudents] =
     await Promise.all([

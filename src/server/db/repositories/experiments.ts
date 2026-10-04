@@ -112,4 +112,35 @@ export const experimentRepository = {
       return mapExperiment(row);
     });
   },
+
+  /**
+   * Stops the ACTIVE experiment: it becomes ARCHIVED and keeps every message and
+   * version it contains. Returns null when nothing was running, so the
+   * administrator can press the button twice without any error.
+   */
+  async stopActive(): Promise<Experiment | null> {
+    return withTransaction(async (client) => {
+      // Same lock as startNew(): a stop and a start can never interleave.
+      const active = await client.query<ExperimentRow>(
+        `select id, sequence, question, status, created_at, started_at, archived_at
+           from experiments
+          where status = 'ACTIVE'
+          for update`,
+      );
+      const row = active.rows[0];
+      if (!row) return null;
+
+      const updated = await client.query<ExperimentRow>(
+        `update experiments
+            set status = 'ARCHIVED', archived_at = now()
+          where id = $1
+          returning id, sequence, question, status, created_at, started_at, archived_at`,
+        [row.id],
+      );
+
+      const stopped = updated.rows[0];
+      if (!stopped) throw new Error("Arret de l'experience impossible.");
+      return mapExperiment(stopped);
+    });
+  },
 };

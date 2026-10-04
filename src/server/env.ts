@@ -54,6 +54,20 @@ export const env = {
     const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
     return Number.isFinite(parsed) && parsed > 300 ? parsed : 43200;
   },
+  /**
+   * Login attempts allowed per minute and per IP address.
+   *
+   * The default (12) is a brute-force brake: passwords are four digits, so the
+   * limit has to stay low. It is configurable because a whole class shares one
+   * public IP behind the school network, and twelve simultaneous connections
+   * would lock most of the room out. Raising it does not make guessing easier
+   * per account, it only lets a legitimate class log in together.
+   */
+  get loginAttemptsPerMinute(): number {
+    const raw = read('LOGIN_ATTEMPTS_PER_MINUTE');
+    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 12;
+  },
   get aiProvider(): string {
     return read('AI_PROVIDER') ?? 'gemini';
   },
