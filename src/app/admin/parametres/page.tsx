@@ -152,7 +152,7 @@ export default async function AdminSettingsPage() {
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline">
               <Sparkles className="h-3 w-3" aria-hidden />
-              Next.js · MongoDB · {ai.provider}
+              Next.js · PostgreSQL · {ai.provider}
             </Badge>
             <span>
               {t.common.appName} · <DateTime value={new Date()} mode="date" />

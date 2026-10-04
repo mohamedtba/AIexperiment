@@ -1,168 +1,210 @@
 import 'server-only';
 
-import { ObjectId } from 'mongodb';
-import { COLLECTIONS, collectionReady } from '../mongodb';
-import { mapAdmin, mapStudent, type AdminDocument, type StudentDocument } from '../documents';
+import { execute, query, queryOne } from '../client';
+import { isUuid } from '../ids';
+import type { AdminAuthRow } from '../rows';
 import type { AdminPublic, StudentPublic } from '@/types';
+
+interface AdminPublicRow {
+  id: string;
+  username: string;
+  created_at: Date;
+  last_login_at: Date | null;
+}
+
+interface StudentPublicRow {
+  id: string;
+  username: string;
+  created_at: Date;
+  last_login_at: Date | null;
+}
 
 /** Data access for the single administrator account. */
 export const adminRepository = {
-  async findByUsername(username: string): Promise<AdminDocument | null> {
-    const doc = await collectionReady<AdminDocument>(COLLECTIONS.admins).findOne({
-      username,
-    });
-    return doc ?? null;
+  async findByUsername(username: string): Promise<AdminAuthRow | null> {
+    return queryOne<AdminAuthRow>(
+      `select id, username, password_hash, created_at, last_login_at
+         from admins
+        where username = $1`,
+      [username],
+    );
   },
 
   async findById(id: string): Promise<AdminPublic | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<AdminDocument>(COLLECTIONS.admins).findOne({
-      _id: new ObjectId(id),
-    });
-    return doc ? mapAdmin(doc) : null;
+    if (!isUuid(id)) return null;
+    const row = await queryOne<AdminPublicRow>(
+      'select id, username, created_at, last_login_at from admins where id = $1',
+      [id],
+    );
+    return row
+      ? {
+          id: row.id,
+          username: row.username,
+          createdAt: row.created_at,
+          lastLoginAt: row.last_login_at,
+        }
+      : null;
   },
 
   async count(): Promise<number> {
-    return collectionReady<AdminDocument>(COLLECTIONS.admins).countDocuments();
+    const row = await queryOne<{ total: string }>(
+      'select count(*)::text as total from admins',
+    );
+    return Number(row?.total ?? 0);
   },
 
-  async upsertByUsername(username: string, passwordHash: string): Promise<AdminPublic> {
-    const collection = collectionReady<AdminDocument>(COLLECTIONS.admins);
-    const existing = await collection.findOne({ username });
-    if (existing) {
-      await collection.updateOne(
-        { _id: existing._id },
-        { $set: { passwordHash } },
-      );
-      return mapAdmin({ ...existing, passwordHash });
-    }
-    const doc: AdminDocument = {
-      _id: new ObjectId(),
-      username,
-      passwordHash,
-      createdAt: new Date(),
-      lastLoginAt: null,
+  /** Creates the administrator or updates the password of the existing account. */
+  async upsertByUsername(
+    username: string,
+    passwordHash: string,
+  ): Promise<{ account: AdminPublic; created: boolean }> {
+    const rows = await query<AdminPublicRow & { created: boolean }>(
+      `insert into admins (username, password_hash)
+            values ($1, $2)
+       on conflict (username) do update
+              set password_hash = excluded.password_hash,
+                  last_login_at = null
+         returning id, username, created_at, last_login_at,
+                   (xmax = 0) as created`,
+      [username, passwordHash],
+    );
+    const row = rows[0];
+    if (!row) throw new Error("Enregistrement de l'administrateur impossible.");
+    return {
+      account: {
+        id: row.id,
+        username: row.username,
+        createdAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+      },
+      created: row.created,
     };
-    await collection.insertOne(doc);
-    return mapAdmin(doc);
   },
 
   async touchLastLogin(id: string): Promise<void> {
-    if (!ObjectId.isValid(id)) return;
-    await collectionReady<AdminDocument>(COLLECTIONS.admins).updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { lastLoginAt: new Date() } },
-    );
+    if (!isUuid(id)) return;
+    await execute('update admins set last_login_at = now() where id = $1', [id]);
   },
 };
 
 /** Data access for student accounts (created by the administrator only). */
 export const studentRepository = {
-  async findByUsername(username: string): Promise<StudentDocument | null> {
-    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne({
-      username,
-    });
-    return doc ?? null;
+  async findByUsername(username: string): Promise<AdminAuthRow | null> {
+    return queryOne<AdminAuthRow>(
+      `select id, username, password_hash, password_version, created_at, last_login_at
+         from students
+        where username = $1`,
+      [username],
+    );
   },
 
   async findById(id: string): Promise<StudentPublic | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne({
-      _id: new ObjectId(id),
-    });
-    return doc ? mapStudent(doc) : null;
+    if (!isUuid(id)) return null;
+    const row = await queryOne<StudentPublicRow>(
+      'select id, username, created_at, last_login_at from students where id = $1',
+      [id],
+    );
+    return row ? toStudentPublic(row) : null;
   },
 
   async existsByUsername(username: string): Promise<boolean> {
-    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne(
-      { username },
-      { projection: { _id: 1 } },
+    const row = await queryOne<{ present: boolean }>(
+      'select true as present from students where username = $1',
+      [username],
     );
-    return doc !== null;
+    return row !== null;
   },
 
   async insert(username: string, passwordHash: string): Promise<StudentPublic> {
-    const doc: StudentDocument = {
-      _id: new ObjectId(),
-      username,
-      passwordHash,
-      passwordVersion: 1,
-      createdAt: new Date(),
-      lastLoginAt: null,
-    };
-    await collectionReady<StudentDocument>(COLLECTIONS.students).insertOne(doc);
-    return mapStudent(doc);
+    const row = await queryOne<StudentPublicRow>(
+      `insert into students (username, password_hash)
+            values ($1, $2)
+         returning id, username, created_at, last_login_at`,
+      [username, passwordHash],
+    );
+    if (!row) throw new Error("Insertion de l'etudiant impossible.");
+    return toStudentPublic(row)!;
   },
 
   /** Password version used to invalidate sessions after a reset. */
   async getPasswordVersion(id: string): Promise<number | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne(
-      { _id: new ObjectId(id) },
-      { projection: { passwordVersion: 1 } },
+    if (!isUuid(id)) return null;
+    const row = await queryOne<{ password_version: number }>(
+      'select password_version from students where id = $1',
+      [id],
     );
-    return doc ? (doc.passwordVersion ?? 1) : null;
+    return row ? row.password_version : null;
   },
 
-  async findAuthById(id: string): Promise<{ username: string; passwordVersion: number } | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<StudentDocument>(COLLECTIONS.students).findOne(
-      { _id: new ObjectId(id) },
-      { projection: { username: 1, passwordVersion: 1 } },
+  async findAuthById(
+    id: string,
+  ): Promise<{ username: string; passwordVersion: number } | null> {
+    if (!isUuid(id)) return null;
+    const row = await queryOne<{ username: string; password_version: number }>(
+      'select username, password_version from students where id = $1',
+      [id],
     );
-    return doc ? { username: doc.username, passwordVersion: doc.passwordVersion ?? 1 } : null;
+    return row ? { username: row.username, passwordVersion: row.password_version } : null;
   },
 
   /**
    * Replaces the password hash and increments the version, which invalidates the
-   * sessions created with the previous password.
+   * sessions created with the previous password. Returns the new version, or
+   * null when the account does not exist.
    */
   async resetPassword(id: string, passwordHash: string): Promise<number | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const result = await collectionReady<StudentDocument>(COLLECTIONS.students).findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      {
-        $set: { passwordHash, updatedAt: new Date() },
-        $inc: { passwordVersion: 1 },
-      },
-      { returnDocument: 'after', projection: { passwordVersion: 1 } },
+    if (!isUuid(id)) return null;
+    const row = await queryOne<{ password_version: number }>(
+      `update students
+          set password_hash = $2,
+              password_version = password_version + 1,
+              updated_at = now()
+        where id = $1
+      returning password_version`,
+      [id, passwordHash],
     );
-    // The driver returns either the document or a ModifyResult depending on the
-    // version / options.
-    const doc = (result && 'value' in result ? result.value : result) as
-      | { passwordVersion?: number }
-      | null;
-    return doc ? (doc.passwordVersion ?? 1) : null;
+    return row ? row.password_version : null;
   },
 
   async list(limit = 500, offset = 0): Promise<StudentPublic[]> {
-    const docs = await collectionReady<StudentDocument>(COLLECTIONS.students)
-      .find({})
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
-    return docs.map(mapStudent);
+    const rows = await query<StudentPublicRow>(
+      `select id, username, created_at, last_login_at
+         from students
+        order by created_at desc
+        limit $1 offset $2`,
+      [limit, offset],
+    );
+    return rows.map(toStudentPublic);
   },
 
   async listByIds(ids: string[]): Promise<StudentPublic[]> {
-    const validIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+    const validIds = ids.filter(isUuid);
     if (validIds.length === 0) return [];
-    const docs = await collectionReady<StudentDocument>(COLLECTIONS.students)
-      .find({ _id: { $in: validIds } })
-      .toArray();
-    return docs.map(mapStudent);
+    const rows = await query<StudentPublicRow>(
+      'select id, username, created_at, last_login_at from students where id = any($1::uuid[])',
+      [validIds],
+    );
+    return rows.map(toStudentPublic);
   },
 
   async count(): Promise<number> {
-    return collectionReady<StudentDocument>(COLLECTIONS.students).countDocuments();
+    const row = await queryOne<{ total: string }>(
+      'select count(*)::text as total from students',
+    );
+    return Number(row?.total ?? 0);
   },
 
   async touchLastLogin(id: string): Promise<void> {
-    if (!ObjectId.isValid(id)) return;
-    await collectionReady<StudentDocument>(COLLECTIONS.students).updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { lastLoginAt: new Date() } },
-    );
+    if (!isUuid(id)) return;
+    await execute('update students set last_login_at = now() where id = $1', [id]);
   },
 };
+
+function toStudentPublic(row: StudentPublicRow): StudentPublic {
+  return {
+    id: row.id,
+    username: row.username,
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at,
+  };
+}

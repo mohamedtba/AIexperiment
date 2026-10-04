@@ -1,34 +1,21 @@
 import 'server-only';
 
-import { ObjectId } from 'mongodb';
-import { COLLECTIONS, collectionReady } from '../mongodb';
-import { mapAccessSettings, type CounterDocument, type SystemSettingsDocument } from '../documents';
+import { queryOne } from '../client';
+import { mapAccessSettings, type AccessSettingsRow } from '../rows';
 import type { AccessSettings } from '@/types';
 
 const SETTINGS_KEY = 'global';
 
+const SELECT_ACCESS = `select student_access_enabled, access_epoch, updated_at, disabled_at
+                         from system_settings
+                        where key = $1`;
+
 /** Global application settings (currently the student access switch). */
 export const settingsRepository = {
+  /** Reads the switch, creating the default row on first use. */
   async getAccessSettings(): Promise<AccessSettings> {
-    const collection = collectionReady<SystemSettingsDocument>(COLLECTIONS.systemSettings);
-    let doc = await collection.findOne({ key: SETTINGS_KEY });
-    if (!doc) {
-      try {
-        const initial: SystemSettingsDocument = {
-          _id: new ObjectId(),
-          key: SETTINGS_KEY,
-          studentAccessEnabled: true,
-          accessEpoch: 1,
-          updatedAt: new Date(),
-          disabledAt: null,
-        };
-        await collection.insertOne(initial);
-        doc = initial;
-      } catch {
-        doc = await collection.findOne({ key: SETTINGS_KEY });
-      }
-    }
-    return mapAccessSettings(doc as SystemSettingsDocument);
+    const row = await readOrCreate();
+    return mapAccessSettings(row);
   },
 
   /**
@@ -36,44 +23,54 @@ export const settingsRepository = {
    * which instantly invalidates all previously issued student sessions.
    */
   async setStudentAccessEnabled(enabled: boolean): Promise<AccessSettings> {
-    const collection = collectionReady<SystemSettingsDocument>(COLLECTIONS.systemSettings);
-    const now = new Date();
-    await collection.updateOne(
-      { key: SETTINGS_KEY },
-      {
-        $set: {
-          studentAccessEnabled: enabled,
-          updatedAt: now,
-          disabledAt: enabled ? null : now,
-        },
-        $inc: { accessEpoch: 1 },
-      },
-      { upsert: true },
+    const row = await queryOne<AccessSettingsRow>(
+      `insert into system_settings (key, student_access_enabled, access_epoch, updated_at, disabled_at)
+            values ($1, $2, 1, now(), case when $2 then null else now() end)
+       on conflict (key) do update
+              set student_access_enabled = excluded.student_access_enabled,
+                  updated_at = now(),
+                  disabled_at = excluded.disabled_at,
+                  access_epoch = system_settings.access_epoch + 1
+         returning student_access_enabled, access_epoch, updated_at, disabled_at`,
+      [SETTINGS_KEY, enabled],
     );
-    const updated = await collection.findOne({ key: SETTINGS_KEY });
-    return mapAccessSettings(
-      updated ??
-        ({
-          key: SETTINGS_KEY,
-          studentAccessEnabled: enabled,
-          accessEpoch: 1,
-          updatedAt: now,
-          disabledAt: enabled ? null : now,
-        } as SystemSettingsDocument),
-    );
+    if (!row) throw new Error("Mise a jour des reglages impossible.");
+    return mapAccessSettings(row);
   },
 };
 
-/** Atomic counters (used for expression version numbering). */
+async function readOrCreate(): Promise<AccessSettingsRow> {
+  const existing = await queryOne<AccessSettingsRow>(SELECT_ACCESS, [SETTINGS_KEY]);
+  if (existing) return existing;
+
+  // Two servers may reach this point at the same time: the conflict clause keeps
+  // a single row and the second writer simply reads it back.
+  const created = await queryOne<AccessSettingsRow>(
+    `insert into system_settings (key, student_access_enabled, access_epoch, updated_at)
+          values ($1, true, 1, now())
+     on conflict (key) do update set key = excluded.key
+     returning student_access_enabled, access_epoch, updated_at, disabled_at`,
+    [SETTINGS_KEY],
+  );
+  if (!created) throw new Error('Reglages systeme introuvables.');
+  return created;
+}
+
+/** Atomic counters (experiment numbering, expression version numbering). */
 export const counterRepository = {
+  /**
+   * Increments a counter and returns its new value in a single atomic
+   * statement, so two concurrent submissions can never share a number.
+   */
   async nextValue(key: string): Promise<number> {
-    const collection = collectionReady<CounterDocument>(COLLECTIONS.counters);
-    await collection.updateOne(
-      { key },
-      { $inc: { value: 1 }, $setOnInsert: { key } },
-      { upsert: true },
+    const row = await queryOne<{ value: number }>(
+      `insert into counters (key, value)
+            values ($1, 1)
+       on conflict (key) do update
+              set value = counters.value + 1
+         returning value`,
+      [key],
     );
-    const doc = await collection.findOne({ key });
-    return doc?.value ?? 1;
+    return row?.value ?? 1;
   },
 };

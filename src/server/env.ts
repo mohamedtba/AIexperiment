@@ -29,10 +29,13 @@ export const env = {
     return process.env.NODE_ENV === 'production';
   },
   get databaseUrl(): string {
-    return requireEnv('DATABASE_URL');
-  },
-  get databaseName(): string | undefined {
-    return read('DATABASE_NAME');
+    const url = requireEnv('DATABASE_URL');
+    if (!url.startsWith('postgres://') && !url.startsWith('postgresql://')) {
+      throw new MissingEnvError(
+        "DATABASE_URL doit commencer par « postgres:// » ou « postgresql:// ».",
+      );
+    }
+    return url;
   },
   get authSecret(): string {
     const secret = read('AUTH_SECRET');

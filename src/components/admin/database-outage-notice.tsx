@@ -5,8 +5,8 @@ import { getDictionary } from '@/i18n';
 const t = getDictionary();
 
 /**
- * Banner displayed at the top of the administrator area when MongoDB cannot be
- * reached (wrong `DATABASE_URL`, unreachable cluster, IP not allowed…). The
+ * Banner displayed at the top of the administrator area when PostgreSQL cannot
+ * be reached (wrong `DATABASE_URL`, unreachable host, firewall…). The
  * session itself is still valid, so the administrator keeps the access switch
  * and can retry once the database is back.
  */

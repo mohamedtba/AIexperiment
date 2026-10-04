@@ -19,9 +19,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  // The MongoDB driver (and bcrypt) rely on Node.js built-ins: they must stay
-  // external packages instead of being bundled by webpack.
-  serverExternalPackages: ['mongodb', 'bcryptjs'],
+  // The PostgreSQL driver (and bcrypt) rely on Node.js built-ins: they must
+  // stay external packages instead of being bundled by webpack.
+  serverExternalPackages: ['pg', 'pg-native', 'bcryptjs'],
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

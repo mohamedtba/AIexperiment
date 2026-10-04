@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { ObjectId } from 'mongodb';
 import { AppError } from '@/lib/errors';
 import { experimentRepository } from '../db/repositories/experiments';
 import { aiMessageRepository } from '../db/repositories/aiMessages';
@@ -156,8 +155,4 @@ export async function getExperimentParticipantDetail(
 function maxDate(current: Date | null, next: Date): Date {
   if (!current) return next;
   return next.getTime() > current.getTime() ? next : current;
-}
-
-export function isValidObjectId(id: string): boolean {
-  return ObjectId.isValid(id);
 }

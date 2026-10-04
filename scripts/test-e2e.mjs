@@ -3,7 +3,8 @@
  * End-to-end integration tests.
  *
  * Boots a REAL production build of the application (`next start`) against:
- *   - a real MongoDB instance (in-memory server, mongodb-memory-server)
+ *   - a real PostgreSQL instance (PGlite, the official Postgres compiled to
+ *     WebAssembly, exposed over TCP so `pg` connects to it normally)
  *   - a local Gemini-compatible endpoint (fake server, no API key required)
  *
  * Every check below exercises the real HTTP API with real cookies, so it covers
@@ -15,10 +16,12 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { PGlite } from '@electric-sql/pglite';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 
 const APP_PORT = 3137;
 const GEMINI_PORT = 4137;
+const DB_PORT = 54329;
 const BASE_URL = `http://127.0.0.1:${APP_PORT}`;
 
 const ADMIN_USERNAME = 'admin';
@@ -199,10 +202,17 @@ async function run() {
   console.log('║   Tests d’intégration — Atelier d’écriture (prod build)          ║');
   console.log('╚══════════════════════════════════════════════════════════════╝\x1b[0m');
 
-  // 1. Base de données réelle
-  const mongo = await MongoMemoryServer.create({ instance: { port: 27019 } });
-  const databaseUrl = `mongodb://127.0.0.1:27019/atelier_test`;
-  console.log(`\n· MongoDB en mémoire : ${databaseUrl}`);
+  // 1. Base de données réelle (PostgreSQL)
+  const database = await PGlite.create();
+  const dbServer = new PGLiteSocketServer({
+    db: database,
+    port: DB_PORT,
+    host: '127.0.0.1',
+    maxConnections: 16,
+  });
+  await dbServer.start();
+  const databaseUrl = `postgres://postgres:postgres@127.0.0.1:${DB_PORT}/postgres?sslmode=disable`;
+  console.log(`\n· PostgreSQL (PGlite) : ${databaseUrl}`);
 
   // 2. Faux endpoint Gemini (compatible API)
   const geminiServer = await startFakeGemini();
@@ -247,7 +257,8 @@ async function run() {
     await sleep(500);
     if (!app.killed) app.kill('SIGKILL');
     geminiServer.close();
-    await mongo.stop();
+    await dbServer.stop().catch(() => {});
+    await database.close().catch(() => {});
   }
 
   printSummary();
@@ -770,7 +781,9 @@ async function runTests() {
       invalid.data?.error?.message ?? `HTTP ${invalid.response.status}`,
     );
 
-    const unknown = await admin.postJson('/api/admin/students/000000000000000000000000/password');
+    const unknown = await admin.postJson(
+      '/api/admin/students/00000000-0000-0000-0000-000000000000/password',
+    );
     check(
       'Étudiant inexistant → 404',
       unknown.response.status === 404,
@@ -1077,7 +1090,7 @@ const ENGLISH_WORDS = [
 ];
 
 /** Product names legitimately displayed in English. */
-const ALLOWED_BRANDS = ['Next.js', 'MongoDB', 'Gemini', 'bcrypt'];
+const ALLOWED_BRANDS = ['Next.js', 'PostgreSQL', 'Gemini', 'bcrypt'];
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

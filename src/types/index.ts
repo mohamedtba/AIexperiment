@@ -1,6 +1,6 @@
 /**
  * Domain types shared by the server layer and the React components.
- * The MongoDB documents use the same shape, with `_id` mapped to `id`.
+ * PostgreSQL rows are mapped to these camelCase shapes by `src/server/db/rows.ts`.
  */
 
 export type ExperimentStatus = 'ACTIVE' | 'ARCHIVED';

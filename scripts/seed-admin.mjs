@@ -10,8 +10,8 @@
  * - Le mot de passe est haché avec bcrypt avant d'être stocké.
  * - La commande est idempotente : relancer la mise à jour change le mot de passe.
  */
-import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
+import pg from 'pg';
 
 const USERNAME_PATTERN = /^[a-z0-9._-]{3,64}$/i;
 
@@ -34,42 +34,35 @@ async function main() {
     fail('ADMIN_PASSWORD doit contenir au moins 8 caractères.');
   }
 
-  const client = new MongoClient(databaseUrl, { serverSelectionTimeoutMS: 10_000 });
+  const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 15_000 });
   await client.connect();
 
   try {
-    const db = client.db(process.env.DATABASE_NAME || undefined);
-    await db.collection('admins').createIndex({ username: 1 }, { unique: true, name: 'admins_username_unique' });
+    await client.query(`create table if not exists admins (
+      id            uuid primary key default gen_random_uuid(),
+      username      text not null,
+      password_hash text not null,
+      created_at    timestamptz not null default now(),
+      last_login_at timestamptz
+    )`);
+    await client.query('create unique index if not exists admins_username_unique on admins (username)');
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const now = new Date();
 
-    const result = await db.collection('admins').findOneAndUpdate(
-      { username },
-      {
-        $set: { username, passwordHash, updatedAt: now },
-        $setOnInsert: { createdAt: now, lastLoginAt: null },
-      },
-      { upsert: true, returnDocument: 'after' },
+    // `xmax = 0` distinguishes an insertion from an update.
+    const result = await client.query(
+      `insert into admins (username, password_hash)
+            values ($1, $2)
+       on conflict (username) do update
+              set password_hash = excluded.password_hash,
+                  last_login_at = null
+         returning created_at, (xmax = 0) as created`,
+      [username, passwordHash],
     );
+    const created = Boolean(result.rows[0]?.created);
 
-    const doc = 'value' in result && result.value ? result.value : null;
-
-    // Valeurs par défaut du paramètre global d'accès.
-    await db.collection('systemSettings').updateOne(
-      { key: 'global' },
-      {
-        $setOnInsert: {
-          studentAccessEnabled: true,
-          accessEpoch: 1,
-          updatedAt: now,
-          disabledAt: null,
-        },
-      },
-      { upsert: true },
-    );
-
-    const created = doc && doc.createdAt && Math.abs(doc.createdAt.getTime() - now.getTime()) < 5000;
+    // The student access switch keeps its default value ("enabled"): the row in
+    // `system_settings` is created by the application on first read.
 
     console.log('\n✔ Administrateur initialisé');
     console.log(`  Identifiant : ${username}`);
@@ -77,7 +70,7 @@ async function main() {
     console.log(`  ${created ? 'Compte créé' : 'Mot de passe mis à jour'}`);
     console.log('  Connectez-vous sur /connexion → onglet « Administrateur ».\n');
   } finally {
-    await client.close();
+    await client.end();
   }
 }
 

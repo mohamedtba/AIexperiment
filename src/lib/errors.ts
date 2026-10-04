@@ -47,7 +47,7 @@ export const ERROR_MESSAGES = {
   VALIDATION_ERROR: 'Certaines informations sont invalides. Veuillez vérifier le formulaire.',
   RATE_LIMIT: 'Trop de requêtes. Veuillez patienter un instant.',
   DATABASE_UNAVAILABLE:
-    'Connexion à la base de données impossible. Vérifiez la variable DATABASE_URL et les identifiants MongoDB.',
+    'Connexion à la base de données impossible. Vérifiez la variable DATABASE_URL et les identifiants PostgreSQL.',
   SERVER_ERROR: 'Une erreur est survenue. Veuillez réessayer.',
   NOT_FOUND: "Cette ressource n'existe pas.",
 } as const;
@@ -143,33 +143,37 @@ export function isAppError(error: unknown): error is AppError {
 }
 
 /**
- * Detects a MongoDB failure (wrong credentials, unreachable host, IP not
- * allowed, invalid connection string…). These are deployment problems, not user
- * mistakes, so they get an explicit message instead of a generic error.
+ * Detects a PostgreSQL failure (wrong credentials, unreachable host, rejected
+ * IP, TLS mismatch, invalid connection string…). These are deployment problems,
+ * not user mistakes, so they get an explicit message instead of a generic error.
  */
 export function isDatabaseError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
 
   const name = 'name' in error ? String((error as { name?: unknown }).name ?? '') : '';
-  if (name.startsWith('Mongo')) return true;
+  if (name.startsWith('AggregateError')) return true;
 
   const code = 'code' in error ? (error as { code?: unknown }).code : undefined;
-  // 18 = AuthenticationFailed, 8000 = AtlasError, 13 = Unauthorized
-  if (code === 18 || code === 13 || code === '18' || code === '13' || code === 8000) {
-    return true;
+  if (typeof code === 'string') {
+    // Network: host unreachable / DNS failure / TLS handshake refused.
+    if (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN', 'ECONNRESET', 'EPROTO'].includes(code)) {
+      return true;
+    }
+    // 28xxx = class 28 (system administration): authentication / authorisation.
+    // 3D000 = invalid_catalog_name, 53300 = too_many_connections.
+    if (/^28/.test(code) || code === '3D000' || code === '53300') return true;
   }
 
   const message = 'message' in error ? String((error as { message?: unknown }).message ?? '') : '';
   return [
-    'Authentication failed',
-    'bad auth',
-    'Server selection timed out',
-    'ECONNREFUSED',
-    'ENOTFOUND',
+    'password authentication failed',
+    'no pg_hba.conf entry',
     'self-signed certificate',
-    'IP address not allowed',
-    'not authorized on admin',
-    'MongoParseError',
+    'unable to verify the first certificate',
+    'certificate has expired',
+    'server closed the connection',
+    'the database system is starting up',
+    'timeout exceeded when trying to connect',
   ].some((needle) => message.includes(needle));
 }
 
@@ -199,7 +203,17 @@ export function toErrorResponse(error: unknown): {
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('duplicate key')) {
+  // 23505 = unique_violation. `students_username_unique` is the only constraint a
+  // client can collide with on purpose; the others are handled in the repositories.
+  const constraint =
+    typeof error === 'object' && error !== null && 'constraint' in error
+      ? String((error as { constraint?: unknown }).constraint ?? '')
+      : '';
+  const uniqueViolation =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: unknown }).code === '23505'
+      : false;
+  if (uniqueViolation && constraint.includes('username')) {
     return {
       status: 409,
       body: {

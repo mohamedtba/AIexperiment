@@ -33,22 +33,22 @@ export async function loginStudent(
   }
 
   const student = await studentRepository.findByUsername(input.username);
-  const passwordHash = student?.passwordHash ?? DUMMY_HASH;
+  const passwordHash = student?.password_hash ?? DUMMY_HASH;
 
   const valid = await verifyPassword(input.password, passwordHash);
   if (!student || !valid) throw new AppError('INVALID_CREDENTIALS', 401);
 
-  await studentRepository.touchLastLogin(student._id.toHexString());
+  await studentRepository.touchLastLogin(student.id);
 
   return {
     student: {
-      id: student._id.toHexString(),
+      id: student.id,
       username: student.username,
-      createdAt: student.createdAt,
+      createdAt: student.created_at,
       lastLoginAt: new Date(),
     },
     accessEpoch: access.accessEpoch,
-    passwordVersion: student.passwordVersion ?? 1,
+    passwordVersion: student.password_version ?? 1,
   };
 }
 
@@ -97,16 +97,16 @@ export async function loginAdmin(
     throw new AppError('INVALID_CREDENTIALS', 401);
   }
 
-  const valid = await verifyPassword(input.password, admin.passwordHash);
+  const valid = await verifyPassword(input.password, admin.password_hash);
   if (!valid) throw new AppError('INVALID_CREDENTIALS', 401);
 
-  await adminRepository.touchLastLogin(admin._id.toHexString());
+  await adminRepository.touchLastLogin(admin.id);
 
   return {
     admin: {
-      id: admin._id.toHexString(),
+      id: admin.id,
       username: admin.username,
-      createdAt: admin.createdAt,
+      createdAt: admin.created_at,
       lastLoginAt: new Date(),
     },
   };

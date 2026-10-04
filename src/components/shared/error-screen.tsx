@@ -11,7 +11,7 @@ const t = getDictionary();
 
 /**
  * Error screen used by the `error.tsx` boundaries of the administrator and
- * student areas. A MongoDB outage (wrong `DATABASE_URL`, unreachable cluster,
+ * student areas. A database outage (wrong `DATABASE_URL`, unreachable server,
  * IP not allowed) is a configuration problem, so it gets an explicit message
  * instead of the generic one.
  */

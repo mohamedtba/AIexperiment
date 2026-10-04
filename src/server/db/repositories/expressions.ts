@@ -1,10 +1,13 @@
 import 'server-only';
 
-import { ObjectId } from 'mongodb';
-import { COLLECTIONS, collectionReady } from '../mongodb';
+import { query, queryOne } from '../client';
+import { isUniqueViolation, isUuid } from '../ids';
 import { counterRepository } from './settings';
-import { mapExpressionVersion, type ExpressionVersionDocument } from '../documents';
+import { mapExpressionVersion, type ExpressionVersionRow } from '../rows';
 import type { ExpressionVersion } from '@/types';
+
+const COLUMNS = `id, student_id, experiment_id, content, version_number, created_at,
+                client_request_id`;
 
 /**
  * Data access for the writing submissions.
@@ -18,42 +21,39 @@ export const expressionRepository = {
     content: string;
     clientRequestId?: string | null;
   }): Promise<ExpressionVersion> {
-    const collection = collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    );
-
+    // Idempotency: a retried request must not create a second version.
     if (input.clientRequestId) {
-      const existing = await collection.findOne({
-        clientRequestId: input.clientRequestId,
-      });
-      if (existing) return mapExpressionVersion(existing);
+      const existing = await findByClientRequestId(input.clientRequestId);
+      if (existing) return existing;
     }
 
-    const doc: ExpressionVersionDocument = {
-      _id: new ObjectId(),
-      studentId: new ObjectId(input.studentId),
-      experimentId: new ObjectId(input.experimentId),
-      content: input.content,
-      versionNumber: await counterRepository.nextValue(
-        `expression:${input.studentId}:${input.experimentId}`,
-      ),
-      createdAt: new Date(),
-      clientRequestId: input.clientRequestId ?? null,
-    };
+    const versionNumber = await counterRepository.nextValue(
+      `expression:${input.studentId}:${input.experimentId}`,
+    );
 
     try {
-      await collection.insertOne(doc);
+      const row = await queryOne<ExpressionVersionRow>(
+        `insert into expression_versions (student_id, experiment_id, content, version_number, client_request_id)
+              values ($1, $2, $3, $4, $5)
+           returning ${COLUMNS}`,
+        [
+          input.studentId,
+          input.experimentId,
+          input.content,
+          versionNumber,
+          input.clientRequestId ?? null,
+        ],
+      );
+      if (!row) throw new Error("Enregistrement de la version impossible.");
+      return mapExpressionVersion(row);
     } catch (error) {
-      if (input.clientRequestId && isDuplicateKeyError(error)) {
-        const existing = await collection.findOne({
-          clientRequestId: input.clientRequestId,
-        });
-        if (existing) return mapExpressionVersion(existing);
+      // Concurrent retry of the same request: the unique index caught it.
+      if (input.clientRequestId && isUniqueViolation(error)) {
+        const existing = await findByClientRequestId(input.clientRequestId);
+        if (existing) return existing;
       }
       throw error;
     }
-
-    return mapExpressionVersion(doc);
   },
 
   async listByStudentAndExperiment(
@@ -61,118 +61,110 @@ export const expressionRepository = {
     experimentId: string,
     limit = 500,
   ): Promise<ExpressionVersion[]> {
-    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(experimentId)) return [];
-    const docs = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    )
-      .find({
-        studentId: new ObjectId(studentId),
-        experimentId: new ObjectId(experimentId),
-      })
-      .sort({ versionNumber: 1 })
-      .limit(limit)
-      .toArray();
-    return docs.map(mapExpressionVersion);
+    if (!isUuid(studentId) || !isUuid(experimentId)) return [];
+    const rows = await query<ExpressionVersionRow>(
+      `select ${COLUMNS}
+         from expression_versions
+        where student_id = $1 and experiment_id = $2
+        order by version_number asc
+        limit $3`,
+      [studentId, experimentId, limit],
+    );
+    return rows.map(mapExpressionVersion);
   },
 
   async listByExperiment(experimentId: string, limit = 2000): Promise<ExpressionVersion[]> {
-    if (!ObjectId.isValid(experimentId)) return [];
-    const docs = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    )
-      .find({ experimentId: new ObjectId(experimentId) })
-      .sort({ createdAt: 1, versionNumber: 1 })
-      .limit(limit)
-      .toArray();
-    return docs.map(mapExpressionVersion);
+    if (!isUuid(experimentId)) return [];
+    const rows = await query<ExpressionVersionRow>(
+      `select ${COLUMNS}
+         from expression_versions
+        where experiment_id = $1
+        order by created_at asc, version_number asc
+        limit $2`,
+      [experimentId, limit],
+    );
+    return rows.map(mapExpressionVersion);
   },
 
   async getLatest(
     studentId: string,
     experimentId: string,
   ): Promise<ExpressionVersion | null> {
-    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(experimentId)) return null;
-    const doc = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    ).findOne(
-      {
-        studentId: new ObjectId(studentId),
-        experimentId: new ObjectId(experimentId),
-      },
-      { sort: { versionNumber: -1 } },
+    if (!isUuid(studentId) || !isUuid(experimentId)) return null;
+    const row = await queryOne<ExpressionVersionRow>(
+      `select ${COLUMNS}
+         from expression_versions
+        where student_id = $1 and experiment_id = $2
+        order by version_number desc
+        limit 1`,
+      [studentId, experimentId],
     );
-    return doc ? mapExpressionVersion(doc) : null;
+    return row ? mapExpressionVersion(row) : null;
   },
 
   async getById(id: string): Promise<ExpressionVersion | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    ).findOne({ _id: new ObjectId(id) });
-    return doc ? mapExpressionVersion(doc) : null;
+    if (!isUuid(id)) return null;
+    const row = await queryOne<ExpressionVersionRow>(
+      `select ${COLUMNS} from expression_versions where id = $1`,
+      [id],
+    );
+    return row ? mapExpressionVersion(row) : null;
   },
 
   async countByExperiment(experimentId: string): Promise<number> {
-    if (!ObjectId.isValid(experimentId)) return 0;
-    return collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    ).countDocuments({ experimentId: new ObjectId(experimentId) });
+    if (!isUuid(experimentId)) return 0;
+    return count('experiment_id = $1', [experimentId]);
   },
 
   async countByStudentAndExperiment(
     studentId: string,
     experimentId: string,
   ): Promise<number> {
-    if (!ObjectId.isValid(studentId) || !ObjectId.isValid(experimentId)) return 0;
-    return collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    ).countDocuments({
-      studentId: new ObjectId(studentId),
-      experimentId: new ObjectId(experimentId),
-    });
+    if (!isUuid(studentId) || !isUuid(experimentId)) return 0;
+    return count('student_id = $1 and experiment_id = $2', [studentId, experimentId]);
   },
 
   async countDistinctStudentsByExperiment(experimentId: string): Promise<number> {
-    if (!ObjectId.isValid(experimentId)) return 0;
-    const docs = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    ).distinct('studentId', { experimentId: new ObjectId(experimentId) });
-    return docs.length;
+    if (!isUuid(experimentId)) return 0;
+    const row = await queryOne<{ total: string }>(
+      'select count(distinct student_id)::text as total from expression_versions where experiment_id = $1',
+      [experimentId],
+    );
+    return Number(row?.total ?? 0);
   },
 
   /** Per-student counters for one experiment (dashboard / participants table). */
   async aggregateByStudent(experimentId: string): Promise<
     Array<{ studentId: string; count: number; lastActivityAt: Date }>
   > {
-    if (!ObjectId.isValid(experimentId)) return [];
-    const rows = await collectionReady<ExpressionVersionDocument>(
-      COLLECTIONS.expressionVersions,
-    )
-      .aggregate<{ _id: ObjectId; count: number; lastActivityAt: Date }>([
-        { $match: { experimentId: new ObjectId(experimentId) } },
-        {
-          $group: {
-            _id: '$studentId',
-            count: { $sum: 1 },
-            lastActivityAt: { $max: '$createdAt' },
-          },
-        },
-      ])
-      .toArray();
-
+    if (!isUuid(experimentId)) return [];
+    const rows = await query<{ student_id: string; count: number; last_activity_at: Date }>(
+      `select student_id, count(*)::int as count, max(created_at) as last_activity_at
+         from expression_versions
+        where experiment_id = $1
+        group by student_id`,
+      [experimentId],
+    );
     return rows.map((row) => ({
-      studentId: row._id.toHexString(),
+      studentId: row.student_id,
       count: row.count,
-      lastActivityAt: row.lastActivityAt,
+      lastActivityAt: row.last_activity_at,
     }));
   },
 };
 
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: number }).code === 11000
+async function count(where: string, params: readonly unknown[]): Promise<number> {
+  const row = await queryOne<{ total: string }>(
+    `select count(*)::text as total from expression_versions where ${where}`,
+    params,
   );
+  return Number(row?.total ?? 0);
+}
+
+async function findByClientRequestId(clientRequestId: string): Promise<ExpressionVersion | null> {
+  const row = await queryOne<ExpressionVersionRow>(
+    `select ${COLUMNS} from expression_versions where client_request_id = $1`,
+    [clientRequestId],
+  );
+  return row ? mapExpressionVersion(row) : null;
 }

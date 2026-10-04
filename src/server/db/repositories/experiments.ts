@@ -1,102 +1,115 @@
 import 'server-only';
 
-import { ObjectId, type Filter } from 'mongodb';
-import { COLLECTIONS, collectionReady } from '../mongodb';
-import { counterRepository } from './settings';
-import { mapExperiment, type ExperimentDocument } from '../documents';
+import { query, queryOne, withTransaction } from '../client';
+import { isUuid } from '../ids';
+import { mapExperiment, type ExperimentRow } from '../rows';
 import type { Experiment } from '@/types';
 
-/** Data access for experiments. A single partial unique index guarantees
- *  that at most one experiment can be ACTIVE at any time. */
+/**
+ * Data access for experiments.
+ *
+ * The partial unique index `experiments_single_active` guarantees, at the
+ * database level, that at most one experiment can be ACTIVE at any time; the
+ * transaction below additionally makes sure the previous experiment is only
+ * archived if the new one is actually created.
+ */
 export const experimentRepository = {
   async findActive(): Promise<Experiment | null> {
-    const doc = await collectionReady<ExperimentDocument>(COLLECTIONS.experiments).findOne({
-      status: 'ACTIVE',
-    });
-    return doc ? mapExperiment(doc) : null;
+    const row = await queryOne<ExperimentRow>(
+      `select id, sequence, question, status, created_at, started_at, archived_at
+         from experiments
+        where status = 'ACTIVE'
+        limit 1`,
+    );
+    return row ? mapExperiment(row) : null;
   },
 
   async findById(id: string): Promise<Experiment | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await collectionReady<ExperimentDocument>(COLLECTIONS.experiments).findOne({
-      _id: new ObjectId(id),
-    });
-    return doc ? mapExperiment(doc) : null;
+    if (!isUuid(id)) return null;
+    const row = await queryOne<ExperimentRow>(
+      `select id, sequence, question, status, created_at, started_at, archived_at
+         from experiments
+        where id = $1`,
+      [id],
+    );
+    return row ? mapExperiment(row) : null;
   },
 
   async listAll(limit = 200): Promise<Experiment[]> {
-    const docs = await collectionReady<ExperimentDocument>(COLLECTIONS.experiments)
-      .find({})
-      .sort({ startedAt: -1 })
-      .limit(limit)
-      .toArray();
-    return docs.map(mapExperiment);
+    const rows = await query<ExperimentRow>(
+      `select id, sequence, question, status, created_at, started_at, archived_at
+         from experiments
+        order by started_at desc
+        limit $1`,
+      [limit],
+    );
+    return rows.map(mapExperiment);
   },
 
   async listArchived(limit = 200): Promise<Experiment[]> {
-    const docs = await collectionReady<ExperimentDocument>(COLLECTIONS.experiments)
-      .find({ status: 'ARCHIVED' })
-      .sort({ archivedAt: -1, startedAt: -1 })
-      .limit(limit)
-      .toArray();
-    return docs.map(mapExperiment);
+    const rows = await query<ExperimentRow>(
+      `select id, sequence, question, status, created_at, started_at, archived_at
+         from experiments
+        where status = 'ARCHIVED'
+        order by archived_at desc nulls last, started_at desc
+        limit $1`,
+      [limit],
+    );
+    return rows.map(mapExperiment);
   },
 
+  /** Archived experiments, the current ACTIVE one excluded. */
   async listArchivedBefore(limit = 200): Promise<Experiment[]> {
-    const filter: Filter<ExperimentDocument> = { status: 'ARCHIVED' };
-    const active = await this.findActive();
-    if (active) filter._id = { $ne: new ObjectId(active.id) };
-    const docs = await collectionReady<ExperimentDocument>(COLLECTIONS.experiments)
-      .find(filter)
-      .sort({ archivedAt: -1, startedAt: -1 })
-      .limit(limit)
-      .toArray();
-    return docs.map(mapExperiment);
+    const rows = await query<ExperimentRow>(
+      `select id, sequence, question, status, created_at, started_at, archived_at
+         from experiments
+        where status = 'ARCHIVED'
+          and id <> coalesce((select id from experiments where status = 'ACTIVE' limit 1), '00000000-0000-0000-0000-000000000000'::uuid)
+        order by archived_at desc nulls last, started_at desc
+        limit $1`,
+      [limit],
+    );
+    return rows.map(mapExperiment);
   },
 
   async count(): Promise<number> {
-    return collectionReady<ExperimentDocument>(COLLECTIONS.experiments).countDocuments({});
+    const row = await queryOne<{ total: string }>(
+      'select count(*)::text as total from experiments',
+    );
+    return Number(row?.total ?? 0);
   },
 
   /**
-   * Starts a new ACTIVE experiment. The previously active experiment is
-   * archived (never deleted). If the creation fails, the previous experiment is
-   * restored so the platform never ends up without an active experiment.
+   * Starts a new ACTIVE experiment. The previously active experiment is archived
+   * (never deleted). The whole operation runs in a transaction, so a failure
+   * leaves the previous experiment active: the platform never ends up without an
+   * active experiment.
    */
   async startNew(question: string): Promise<Experiment> {
-    const collection = collectionReady<ExperimentDocument>(COLLECTIONS.experiments);
-    const previous = await collection.findOne({ status: 'ACTIVE' });
-
-    if (previous) {
-      await collection.updateOne(
-        { _id: previous._id },
-        { $set: { status: 'ARCHIVED', archivedAt: new Date() } },
+    return withTransaction(async (client) => {
+      // Locks the current ACTIVE row so two concurrent starts are serialised.
+      await client.query(`select id from experiments where status = 'ACTIVE' for update`);
+      await client.query(
+        `update experiments set status = 'ARCHIVED', archived_at = now() where status = 'ACTIVE'`,
       );
-    }
 
-    const now = new Date();
-    const doc: ExperimentDocument = {
-      _id: new ObjectId(),
-      sequence: await counterRepository.nextValue('experiments'),
-      question,
-      status: 'ACTIVE',
-      createdAt: now,
-      startedAt: now,
-      archivedAt: null,
-    };
+      const counter = await client.query<{ value: number }>(
+        `insert into counters (key, value) values ($1, 1)
+           on conflict (key) do update set value = counters.value + 1
+         returning value`,
+        ['experiments'],
+      );
 
-    try {
-      await collection.insertOne(doc);
-    } catch (error) {
-      if (previous) {
-        await collection.updateOne(
-          { _id: previous._id },
-          { $set: { status: 'ACTIVE', archivedAt: null } },
-        );
-      }
-      throw error;
-    }
+      const inserted = await client.query<ExperimentRow>(
+        `insert into experiments (sequence, question, status)
+              values ($1, $2, 'ACTIVE')
+           returning id, sequence, question, status, created_at, started_at, archived_at`,
+        [counter.rows[0]?.value ?? 1, question],
+      );
 
-    return mapExperiment(doc);
+      const row = inserted.rows[0];
+      if (!row) throw new Error("Creation de l'experience impossible.");
+      return mapExperiment(row);
+    });
   },
 };

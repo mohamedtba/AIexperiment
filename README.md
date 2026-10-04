@@ -1,6 +1,6 @@
 # Atelier d’écriture IA — AI-assisted writing workshop platform
 
-A production-ready educational experiment platform built with **Next.js (App Router)**, **TypeScript**, **MongoDB** and **Google Gemini**.
+A production-ready educational experiment platform built with **Next.js (App Router)**, **TypeScript**, **PostgreSQL** and **Google Gemini**.
 
 A single administrator creates student accounts and runs writing experiments. Every student gets:
 
@@ -21,7 +21,7 @@ The administrator can suspend student access globally, browse every conversation
 3. [Prerequisites](#prerequisites)
 4. [Installation](#installation)
 5. [Environment variables](#environment-variables)
-6. [MongoDB Atlas setup](#mongodb-atlas-setup)
+6. [PostgreSQL setup](#postgresql-setup)
 7. [Gemini API key](#gemini-api-key)
 8. [Database initialisation](#database-initialisation)
 9. [Local development](#local-development)
@@ -76,19 +76,19 @@ The administrator can suspend student access globally, browse every conversation
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + shadcn-style components (Radix UI + CVA) |
 | Icons | lucide-react |
-| Database | MongoDB with the official driver (`mongodb`) behind a repository layer |
+| Database | PostgreSQL with the official driver (`pg`) behind a repository layer |
 | Authentication | JWT (`jose`) in an **HttpOnly** cookie, bcrypt password hashing |
 | AI | Provider abstraction (`AIProvider`) with a Gemini implementation using the official REST API |
-| Tests | Custom end-to-end harness (`mongodb-memory-server` + real production build + fake Gemini endpoint) |
+| Tests | Custom end-to-end harness (PGlite — real PostgreSQL compiled to WebAssembly, exposed over TCP + real production build + fake Gemini endpoint) |
 
-The official MongoDB driver is used instead of Prisma because Prisma’s MongoDB connector is still not stable enough for production; all data access is centralised in `src/server/db/repositories/`.
+All data access is centralised in `src/server/db/repositories/`, behind a small query layer (`src/server/db/client.ts`). The schema is created by the application itself on the first authenticated request, with idempotent statements and no migration tool.
 
 ---
 
 ## Prerequisites
 
 - **Node.js ≥ 20.9** (22 LTS recommended)
-- A MongoDB database: [MongoDB Atlas](https://www.mongodb.com/atlas) (free tier) or a local `mongod`
+- A PostgreSQL database: [Neon](https://neon.tech) (free tier), Supabase, Render, or a local PostgreSQL ≥ 14
 - A Google Gemini API key — [AI Studio](https://aistudio.google.com/app/apikey) (free tier available)
 
 ---
@@ -102,11 +102,11 @@ npm install
 cp .env.example .env.local   # then fill in the values (see next section)
 ```
 
-`.env.local` is used by `next dev` / `next build`. The Node scripts (`npm run seed:admin`, `npm run db:indexes`) read `.env` — either create a `.env` file with the same values, or export the variables in your shell:
+`.env.local` is used by `next dev` / `next build`. The Node scripts (`npm run seed:admin`, `npm run db:schema`) read `.env` — either create a `.env` file with the same values, or export the variables in your shell:
 
 ```bash
 # PowerShell
-$env:DATABASE_URL="mongodb+srv://…"
+$env:DATABASE_URL="postgresql://user:password@host/neondb?sslmode=verify-full"
 ```
 
 ---
@@ -115,7 +115,7 @@ $env:DATABASE_URL="mongodb+srv://…"
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | yes | MongoDB connection string, e.g. `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/atelier_ecriture?retryWrites=true&w=majority` |
+| `DATABASE_URL` | yes | PostgreSQL connection string, e.g. `postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=verify-full`. TLS is driven by `sslmode` (`verify-full` recommended, `require`, `disable`); URL-encode the password if it contains `@ : / ? # % &`. |
 | `AUTH_SECRET` | yes | HMAC-SHA256 signing secret for session cookies. **Minimum 32 characters in production** (the app refuses to boot otherwise). Generate with `openssl rand -base64 48`. Changing it invalidates all sessions. |
 | `ADMIN_USERNAME` | yes (for the seed) | Username of the single administrator (default `admin`). Used only by `npm run seed:admin`. |
 | `ADMIN_PASSWORD` | yes (for the seed) | Administrator password. Used only by `npm run seed:admin`, then read by nothing at runtime. |
@@ -125,24 +125,22 @@ $env:DATABASE_URL="mongodb+srv://…"
 | `GEMINI_BASE_URL` | no | Override the Gemini endpoint (useful for tests or a proxy). Default: official Google API. |
 | `SESSION_MAX_AGE` | no | Session lifetime in seconds, default `43200` (12 h). |
 | `APP_URL` | no | Public URL of the deployment, used for metadata. |
-| `DATABASE_NAME` | no | Overrides the database name taken from `DATABASE_URL`. |
 
 **Never commit a real `.env` / `.env.local`** — both are already listed in `.gitignore`, and `.env.example` is the documented template.
 
 ---
 
-## MongoDB Atlas setup
+## PostgreSQL setup
 
-1. Create a free **M0** cluster on [MongoDB Atlas](https://www.mongodb.com/atlas).
-2. **Database Access** → create a user (e.g. `atelier`) with a strong password.
-3. **Network Access** → allow your connection. For a Render deployment, allow Render’s outbound IPs, or `0.0.0.0/0` for a short-lived class experiment.
-4. **Deploy** → copy the connection string and replace the password placeholder:
+1. Create a free database on [Neon](https://neon.tech) (or Supabase / Render / a local PostgreSQL ≥ 14).
+2. Copy the **pooled** connection string and keep `sslmode=verify-full` (or `require`):
 
 ```
-mongodb+srv://atelier:<password>@cluster0.xxxxx.mongodb.net/atelier_ecriture?retryWrites=true&w=majority
+postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=verify-full
 ```
 
-5. Paste it into `DATABASE_URL`. No schema migration is needed: collections and indexes are created automatically on first use.
+3. Paste it into `DATABASE_URL`. **No migration step is required**: the schema (`src/server/db/schema.ts`) is applied by the application on the first authenticated request, with idempotent `create table if not exists` statements. `npm run db:schema` does the same thing explicitly.
+4. Run the seed once: `npm run seed:admin`.
 
 ---
 
@@ -160,11 +158,11 @@ The key is read exclusively on the server (`src/server/env.ts`). A test in the s
 
 ```bash
 npm run seed:admin    # creates the single administrator (bcrypt hash)
-npm run db:indexes    # optional: creates the indexes ahead of the first request
+npm run db:schema     # optional: creates the tables and indexes ahead of the first request
 ```
 
-- `seed:admin` is **idempotent**: if the administrator already exists, nothing is changed. There is **no admin registration page** — this script is the only way to create the account.
-- Indexes are also created automatically (memoised, executed on the first authenticated request), so `db:indexes` is a convenience for production restarts.
+- `seed:admin` is **idempotent**: if the administrator already exists, only the password is updated. There is **no admin registration page** — this script is the only way to create the account.
+- The schema is also created automatically (memoised, executed on the first authenticated request): every statement uses `create table if not exists`, so `db:schema` is only a convenience for production restarts.
 
 ---
 
@@ -184,28 +182,23 @@ npm run start     # serve the production build
 npm run test:e2e  # full integration suite (boots its own server + database)
 ```
 
-### Running without Atlas (optional)
+### Using a local PostgreSQL (optional)
 
-A local MongoDB can be started for development without any Atlas cluster. The data
-is stored in `.mongo-data/` (git-ignored) and survives restarts.
+If you prefer not to create a hosted database, any local PostgreSQL ≥ 14 works.
+With Docker:
 
 ```bash
-# terminal 1
-npm run db:local
-# DATABASE_URL=mongodb://127.0.0.1:27017/atelier_ecriture
+docker run -d --name atelier-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=atelier postgres:16
+```
 
-# terminal 2 (.env)
-DATABASE_URL=mongodb://127.0.0.1:27017/atelier_ecriture
+```bash
+# .env
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/atelier?sslmode=disable
 npm run seed:admin
 npm run dev
 ```
 
-Stop the database with `Ctrl+C`; delete `.mongo-data/` to start from scratch.
-Keep the Atlas URL in a comment in `.env` so you can switch back in one line:
-
-```
-# DATABASE_URL=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/atelier_ecriture
-```
+TLS is controlled by `sslmode`, so a local server must use `sslmode=disable`.
 
 ---
 
@@ -248,10 +241,10 @@ The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Login screen shows a yellow **“Base de données injoignable”** banner, API answers `503 DATABASE_UNAVAILABLE` | `DATABASE_URL` is wrong, the password contains unencoded special characters (`@ : / ? # %`), the Atlas **Network Access** list does not contain your IP, or the cluster is down | Check the connection string, allow your IP in Atlas, restart the cluster from the Atlas UI |
-| `bad auth : Authentication failed` | Wrong username or password in `DATABASE_URL` | Copy the exact user from Atlas → *Database Access*; never keep the `<username>` placeholder |
-| `SSL routines: … tlsv1 alert internal error` | The MongoDB cluster refuses the TLS handshake (Atlas-side outage, free tier waking up) | Wait a minute, then *Restart cluster* in the Atlas UI |
-| `Topology is closed` in the server logs | The connection pool was discarded by the driver after the outage above | Restart the server (`npm run dev` / restart the Render service); the pool is rebuilt on boot |
+| Login screen shows a yellow **“Base de données injoignable”** banner, API answers `503 DATABASE_UNAVAILABLE` | `DATABASE_URL` is wrong, the password contains unencoded special characters (`@ : / ? # %`), the host is suspended, or the IP is not allowed by the provider | Check the connection string (Neon → *Connection string*, or *Databases* on other providers) and the IP allow-list |
+| `password authentication failed for user "…"` | Wrong username or password in `DATABASE_URL` | Copy the exact user from the provider dashboard; never keep a `<username>` placeholder. With Neon, keep the `-pooler` hostname as given |
+| `self-signed certificate in certificate chain` | The provider’s certificate is not trusted by Node.js | Use `sslmode=verify-full` (recommended); for a self-signed server, point `NODE_EXTRA_CA_CERTS` at the CA file |
+| `the database system is starting up` / `ECONNREFUSED` | The server is cold-starting or unreachable | Wait a few seconds and retry; on Neon, a scale-to-zero project wakes up on the first connection |
 | “L’assistant IA n’est pas configuré sur le serveur.” | `GEMINI_API_KEY` is empty | Set the key from <https://aistudio.google.com/app/apikey> and restart the server |
 
 ---
@@ -264,7 +257,7 @@ npm run test:e2e
 
 The harness is not a mock: it starts a **real production build** (`next start`) against
 
-- a **real MongoDB** (`mongodb-memory-server`, first run downloads a binary ~780 MB and caches it),
+- a **real PostgreSQL** ([PGlite](https://pglite.dev), the official Postgres compiled to WebAssembly and exposed over TCP, so `pg` connects to it exactly as it would to Neon — no Docker and no local server required),
 - a **local Gemini-compatible endpoint** (no API key, no internet required),
 
 then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **111/111 checks green**, in 16 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, password reset, archives, global access switch, new experiment, logout, French-only UI, and secret exposure.
@@ -333,7 +326,7 @@ src/
   server/
     ai/                   # AIProvider abstraction + Gemini implementation
     auth/                 # session, guards, password hashing, rate limiting
-    db/                   # Mongo client, collections, indexes, repositories
+    db/                   # PostgreSQL pool, schema, row mappers, repositories
     services/             # use cases (admin, student, access)
 ```
 
@@ -346,7 +339,7 @@ src/
 - **Server-side authorisation**: `requireAdmin()` / `requireStudent()` derive the identity from the cookie. The role, the *access epoch* and the student *password version* are verified on every request; the epoch is incremented on each access toggle (revoking every student session instantly) and the password version on each password reset (revoking that student's sessions only).
 - Passwords can only be **regenerated**, never read back: the reset endpoint returns the new plaintext password exactly once, and no endpoint ever returns a password afterwards.
 - The **edge middleware** only verifies the signature (no database in the Edge runtime); real authorisation happens in the layouts, pages and API routes.
-- **NoSQL injection**: every payload schema is `.strict()`, identifiers are validated against `/^[a-f\d]{24}$/i`, and `studentId` / `experimentId` sent by a client are rejected.
+- **SQL injection**: every payload schema is `.strict()`, identifiers are validated against the UUID format before reaching PostgreSQL, `studentId` / `experimentId` sent by a client are rejected, and **every query uses bound parameters** (`$1`, `$2`, …) — no value is ever concatenated into SQL.
 - **Rate limiting** on logins (per IP) and AI messages (per student).
 - All secrets are server-only (`server-only` + `next.config.ts` → `serverExternalPackages`); the test suite verifies no secret reaches the client bundles.
 - API responses are sent with `Cache-Control: no-store`.

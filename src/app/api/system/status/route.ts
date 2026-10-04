@@ -7,7 +7,7 @@ import { getCurrentExperiment } from '@/server/services/experimentService';
  * GET /api/system/status — public status used by the login screen.
  *
  * `database` tells the login page whether a deployment problem (bad
- * `DATABASE_URL`, wrong Mongo credentials, IP not allowed…) prevents any
+ * `DATABASE_URL`, wrong PostgreSQL credentials, rejected IP…) prevents any
  * connection, which is very different from "student access is suspended".
  */
 export const GET = createRouteHandler({
