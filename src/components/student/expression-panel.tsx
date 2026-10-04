@@ -190,6 +190,7 @@ export function ExpressionPanel({
           <span className="text-xs text-muted-foreground tabular-nums">
             {t.common.plural(countWords(draft), t.common.word, t.common.words)} ·{' '}
             {draft.length}/5000 {t.common.characters}
+            {/* A bare "x/5000 caractères" counter keeps the plural: the ceiling is part of the label. */}
           </span>
 
           <div className="flex items-center gap-2">
@@ -268,7 +269,12 @@ export function ExpressionPanel({
                           t.common.word,
                           t.common.words,
                         )}{' '}
-                        · {version.content.length} {t.common.characters}
+                        ·{' '}
+                        {t.common.plural(
+                          version.content.length,
+                          t.common.character,
+                          t.common.characters,
+                        )}
                       </span>
                       {isLatest ? (
                         <Button

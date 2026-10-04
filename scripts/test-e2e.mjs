@@ -1275,6 +1275,7 @@ async function checkFrenchPlurals() {
       ['messages', 'message'],
       ['students', 'student'],
       ['words', 'word'],
+      ['characters', 'character'],
     ];
     const manquants = paires
       .filter(([, singulier]) => !entry(singulier))
@@ -1300,11 +1301,10 @@ async function checkFrenchPlurals() {
     const fautifs = [];
     for (const fichier of composants) {
       const source = await readSource(fichier);
-      for (const pluriel of ['versions', 'messages', 'students', 'words']) {
-        if (
-          new RegExp(`\\}\\s*\\{?\\s*t\\.common\\.${pluriel}\\b`).test(source) ||
-          new RegExp(`\\}\\s*\\$\\{t\\.common\\.${pluriel}\\b`).test(source)
-        ) {
+      // "1 version" is correct, "{count} versions" is not: the noun must go
+      // through t.common.plural(), never straight after an interpolated number.
+      for (const pluriel of paires.map(([nom]) => nom)) {
+        if (new RegExp(`\\}\\s*\\{?\\s*t\\.common\\.${pluriel}\\b`).test(source)) {
           fautifs.push(`${fichier} → t.common.${pluriel}`);
         }
       }
