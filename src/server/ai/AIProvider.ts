@@ -19,6 +19,8 @@ export type AIErrorCode = Extract<
   | 'AI_EMPTY_RESPONSE'
   | 'AI_BLOCKED'
   | 'AI_NOT_CONFIGURED'
+  | 'AI_INVALID_KEY'
+  | 'AI_MODEL_UNAVAILABLE'
   | 'AI_GENERIC_ERROR'
 >;
 

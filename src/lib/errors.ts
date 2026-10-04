@@ -36,6 +36,10 @@ export const ERROR_MESSAGES = {
   AI_INVALID_RESPONSE: "Réponse inattendue de l'assistant IA.",
   AI_BLOCKED: "La demande a été bloquée par le filtre de sécurité de l'assistant IA.",
   AI_NOT_CONFIGURED: "L'assistant IA n'est pas configuré sur le serveur.",
+  AI_INVALID_KEY:
+    "La clé API de l'assistant IA est refusée par Google. Vérifiez la variable GEMINI_API_KEY et l'activation de l'API Generative Language.",
+  AI_MODEL_UNAVAILABLE:
+    "Le modèle d'assistant IA configuré n'est plus disponible. Vérifiez la variable GEMINI_MODEL.",
   AI_GENERIC_ERROR: "Une erreur est survenue. Veuillez réessayer.",
 
   // Expression écrite
@@ -124,6 +128,8 @@ function defaultStatusForCode(code: ErrorCode): number {
     case 'AI_TIMEOUT':
     case 'AI_UNAVAILABLE':
     case 'AI_NOT_CONFIGURED':
+    case 'AI_INVALID_KEY':
+    case 'AI_MODEL_UNAVAILABLE':
       return 502;
     case 'AI_INVALID_RESPONSE':
     case 'AI_BLOCKED':

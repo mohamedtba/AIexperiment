@@ -120,8 +120,8 @@ $env:DATABASE_URL="postgresql://user:password@host/neondb?sslmode=verify-full"
 | `ADMIN_USERNAME` | yes (for the seed) | Username of the single administrator (default `admin`). Used only by `npm run seed:admin`. |
 | `ADMIN_PASSWORD` | yes (for the seed) | Administrator password. Used only by `npm run seed:admin`, then read by nothing at runtime. |
 | `AI_PROVIDER` | no | Provider registry key, `gemini` (default). |
-| `GEMINI_API_KEY` | yes (for the AI) | Server-side only. Obtained from AI Studio. |
-| `GEMINI_MODEL` | no | Default `gemini-2.0-flash`. |
+| `GEMINI_API_KEY` | yes (for the AI) | Server-side only. Obtained from AI Studio. Must be the 39-character key starting with `AIza`; any other value is rejected by Google (`API_KEY_INVALID`). |
+| `GEMINI_MODEL` | no | Default `gemini-3.8-flash`. Google retires models without warning — if the assistant reports that the model is unavailable, update this value to one currently served (AI Studio lists them). |
 | `GEMINI_BASE_URL` | no | Override the Gemini endpoint (useful for tests or a proxy). Default: official Google API. |
 | `SESSION_MAX_AGE` | no | Session lifetime in seconds, default `43200` (12 h). |
 | `APP_URL` | no | Public URL of the deployment, used for metadata. |
@@ -147,10 +147,17 @@ postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=ver
 ## Gemini API key
 
 1. Open [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Create an API key.
+2. Create an API key. It is **39 characters long and starts with `AIza`** (e.g. `AIzaSy…`).
 3. Put it in `GEMINI_API_KEY` (server-side only).
 
 The key is read exclusively on the server (`src/server/env.ts`). A test in the suite (`Sécurité des secrets`) scans the client bundles and the server build output to make sure it never leaks.
+
+Two server-configuration mistakes are reported with a dedicated French message instead of a generic failure:
+
+| Message | Cause |
+| --- | --- |
+| « La clé API de l'assistant IA est refusée par Google. » | `GEMINI_API_KEY` is missing, truncated, mistyped, revoked, or refers to another Google credential. Google answers `API_KEY_INVALID`. |
+| « Le modèle d'assistant IA configuré n'est plus disponible. » | `GEMINI_MODEL` designates a model Google no longer serves (Google retires models without warning). Pick a current one in `GEMINI_MODEL`. |
 
 ---
 
@@ -246,6 +253,8 @@ The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at
 | `self-signed certificate in certificate chain` | The provider’s certificate is not trusted by Node.js | Use `sslmode=verify-full` (recommended); for a self-signed server, point `NODE_EXTRA_CA_CERTS` at the CA file |
 | `the database system is starting up` / `ECONNREFUSED` | The server is cold-starting or unreachable | Wait a few seconds and retry; on Neon, a scale-to-zero project wakes up on the first connection |
 | “L’assistant IA n’est pas configuré sur le serveur.” | `GEMINI_API_KEY` is empty | Set the key from <https://aistudio.google.com/app/apikey> and restart the server |
+| “La clé API de l’assistant IA est refusée par Google.” | `GEMINI_API_KEY` is not a Gemini key (must start with `AIza`, 39 characters) | Recopy the whole key; check `.env` has no leftover quotes or line break around the value |
+| “Le modèle d’assistant IA configuré n’est plus disponible.” | `GEMINI_MODEL` was retired by Google | Set `GEMINI_MODEL` to a model currently listed in AI Studio |
 
 ---
 

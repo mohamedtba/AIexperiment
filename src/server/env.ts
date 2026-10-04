@@ -61,7 +61,9 @@ export const env = {
     return read('GEMINI_API_KEY');
   },
   get geminiModel(): string {
-    return read('GEMINI_MODEL') ?? 'gemini-2.0-flash';
+    // `gemini-2.0-flash` has been retired by Google: the API answers 404 and
+    // names the replacement in the error, so it must not be the default.
+    return read('GEMINI_MODEL') ?? 'gemini-3.8-flash';
   },
   get geminiBaseUrl(): string {
     return read('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com/v1beta';

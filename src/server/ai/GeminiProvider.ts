@@ -122,14 +122,18 @@ export class GeminiProvider implements AIProvider {
         } else if (response.status >= 500) {
           lastError = new AIProviderError(PROVIDER_NAME, 'AI_UNAVAILABLE');
         } else {
-          // 4xx other than 429: invalid key, quota, malformed request.
+          // 4xx other than 429: retired model, invalid key, quota, bad request.
+          // Google answers 404 as soon as `GEMINI_MODEL` is no longer served,
+          // before it even looks at the key, so this case is checked first.
           const details = await safeText(response);
           console.error('[gemini] Requete refusee', response.status, details.slice(0, 500));
           throw new AIProviderError(
             PROVIDER_NAME,
-            response.status === 400 || response.status === 403
-              ? 'AI_GENERIC_ERROR'
-              : 'AI_UNAVAILABLE',
+            response.status === 404 || isModelRetired(details)
+              ? 'AI_MODEL_UNAVAILABLE'
+              : isKeyRejected(details)
+                ? 'AI_INVALID_KEY'
+                : 'AI_GENERIC_ERROR',
           );
         }
       } catch (error) {
@@ -192,6 +196,36 @@ async function safeText(response: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/**
+ * Distinguishes "the server configuration is wrong" (a mistyped, revoked or
+ * malformed `GEMINI_API_KEY`, or an API that is not enabled) from a genuine
+ * student-side error, so the administrator is pointed at the real cause instead
+ * of being told to simply retry.
+ */
+function isKeyRejected(body: string): boolean {
+  return [
+    'API_KEY_INVALID',
+    'API key not valid',
+    'API_KEY_NOT_FOUND',
+    'PERMISSION_DENIED',
+    'API has not been used',
+    'SERVICE_DISABLED',
+  ].some((needle) => body.includes(needle));
+}
+
+/**
+ * True when the configured `GEMINI_MODEL` is no longer served by Google.
+ * Google retires models without warning, so the administrator is told which
+ * variable to change instead of being asked to simply retry.
+ */
+function isModelRetired(body: string): boolean {
+  return (
+    body.includes('is no longer available') ||
+    body.includes('models/') && body.includes('not found') ||
+    body.includes('NOT_FOUND')
+  );
 }
 
 function isAbortError(error: unknown): boolean {

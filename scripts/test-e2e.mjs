@@ -234,7 +234,7 @@ async function run() {
       ADMIN_PASSWORD,
       GEMINI_API_KEY: 'clé-de-test-gemini-1234567890',
       GEMINI_BASE_URL: `http://127.0.0.1:${GEMINI_PORT}/v1beta`,
-      GEMINI_MODEL: 'gemini-2.0-flash',
+      GEMINI_MODEL: 'gemini-3.8-flash',
       SESSION_MAX_AGE: '3600',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -249,6 +249,7 @@ async function run() {
 
     await runTests();
     await checkNoSecretExposure();
+    await checkConnectionResilience();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
     results.push({ group: 'Harnais', label: 'Exécution du test', ok: false, detail: String(error?.message ?? error) });
@@ -1168,6 +1169,54 @@ async function checkNoSecretExposure() {
       ? serverLeaks.slice(0, 3).join(', ')
       : `${serverFileCount} fichiers serveur analysés`,
   );
+}
+
+/**
+ * 17. Une connexion PostgreSQL coupée ne doit pas casser la plateforme.
+ *
+ * Every managed serverless PostgreSQL (Neon, Supabase) closes idle connections,
+ * so the pooled socket can be dead by the time it is handed out. The
+ * application must reconnect transparently instead of answering
+ * « base de donnees injoignable ».
+ */
+async function checkConnectionResilience() {
+  group('17. Connexion PostgreSQL interrompue');
+  {
+    const clientSource = await readSource('src/server/db/client.ts');
+    check(
+      'Les requêtes sont retentées après une connexion coupée',
+      /isDeadConnection/.test(clientSource) && /runWithRetry/.test(clientSource),
+      'client.ts',
+    );
+    check(
+      'Aucune requête SQL n’est concaténée',
+      !/\+ *['"`]\s*(select|insert|update|delete)\b/i.test(clientSource),
+      'paramètres liés uniquement',
+    );
+
+    // The observable proof: the service keeps answering while the pool churns.
+    // `/api/system/status` is public and touches the database on every call.
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, () => createClient().get('/api/system/status')),
+    );
+    const healthy = responses.filter(
+      (item) => item.response.status === 200 && item.data?.database === 'ok',
+    ).length;
+    check(
+      'Le service reste disponible après une rafale de requêtes',
+      healthy === responses.length,
+      `${healthy}/${responses.length} réponses « base de donnees ok »`,
+    );
+  }
+}
+
+/** Reads a source file of the project (used by the resilience checks). */
+async function readSource(relativePath) {
+  try {
+    return await readFile(path.join(process.cwd(), relativePath), 'utf8');
+  } catch {
+    return '';
+  }
 }
 
 function printSummary() {
