@@ -315,6 +315,15 @@ export const access = {
   resumeTitle: 'Rouvrir l’accès aux étudiants',
 } as const;
 
+export const errors = {
+  genericTitle: 'Une erreur est survenue',
+  genericBody:
+    'Le service a rencontré un problème inattendu. Veuillez réessayer dans un instant.',
+  databaseTitle: 'Base de données injoignable',
+  databaseBody:
+    'La connexion à la base de données a échoué. Vérifiez la variable DATABASE_URL et les identifiants MongoDB, puis redémarrez le serveur si le problème persiste.',
+} as const;
+
 export const fr = {
   common,
   nav,
@@ -325,6 +334,7 @@ export const fr = {
   settings,
   student,
   access,
+  errors,
 };
 
 export type Dictionary = typeof fr;

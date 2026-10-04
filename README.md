@@ -221,6 +221,18 @@ The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at
 
 ---
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Login screen shows a yellow **“Base de données injoignable”** banner, API answers `503 DATABASE_UNAVAILABLE` | `DATABASE_URL` is wrong, the password contains unencoded special characters (`@ : / ? # %`), the Atlas **Network Access** list does not contain your IP, or the cluster is down | Check the connection string, allow your IP in Atlas, restart the cluster from the Atlas UI |
+| `bad auth : Authentication failed` | Wrong username or password in `DATABASE_URL` | Copy the exact user from Atlas → *Database Access*; never keep the `<username>` placeholder |
+| `SSL routines: … tlsv1 alert internal error` | The MongoDB cluster refuses the TLS handshake (Atlas-side outage, free tier waking up) | Wait a minute, then *Restart cluster* in the Atlas UI |
+| `Topology is closed` in the server logs | The connection pool was discarded by the driver after the outage above | Restart the server (`npm run dev` / restart the Render service); the pool is rebuilt on boot |
+| “L’assistant IA n’est pas configuré sur le serveur.” | `GEMINI_API_KEY` is empty | Set the key from <https://aistudio.google.com/app/apikey> and restart the server |
+
+---
+
 ## Automated test suite
 
 ```bash
