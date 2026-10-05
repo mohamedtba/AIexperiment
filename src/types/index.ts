@@ -40,9 +40,28 @@ export interface ExpressionVersion {
   clientRequestId?: string | null;
 }
 
+/**
+ * Study group of a student.
+ *
+ * `AI_LIBRE` and `AI_GUIDEE` are the two groups of the experiment. This is an
+ * administrative label only: it is displayed in the administration area and
+ * exported with the transcripts, but it never changes how the assistant answers.
+ */
+export const STUDENT_GROUPS = ['AI_LIBRE', 'AI_GUIDEE'] as const;
+
+export type StudentGroup = (typeof STUDENT_GROUPS)[number];
+
+export const DEFAULT_STUDENT_GROUP: StudentGroup = 'AI_LIBRE';
+
+/** Narrows an untrusted database value to a known group. */
+export function toStudentGroup(value: string | null | undefined): StudentGroup {
+  return value === 'AI_GUIDEE' ? 'AI_GUIDEE' : DEFAULT_STUDENT_GROUP;
+}
+
 export interface StudentPublic {
   id: string;
   username: string;
+  group: StudentGroup;
   createdAt: Date;
   lastLoginAt: Date | null;
 }

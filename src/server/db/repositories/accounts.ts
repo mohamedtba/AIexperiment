@@ -3,7 +3,25 @@ import 'server-only';
 import { execute, query, queryOne } from '../client';
 import { isUuid } from '../ids';
 import type { AdminAuthRow } from '../rows';
-import type { AdminPublic, StudentPublic } from '@/types';
+import {
+  toStudentGroup,
+  type AdminPublic,
+  type StudentGroup,
+  type StudentPublic,
+} from '@/types';
+
+/**
+ * Column list of `students` without the password, used by every read.
+ *
+ * `study_group` is the column name on purpose: GROUP is a reserved word in
+ * PostgreSQL and would need to be quoted everywhere.
+ */
+const STUDENT_COLUMNS = 'id, username, study_group, created_at, last_login_at';
+
+/** Row returned when authenticating a student (carries the hash). */
+interface StudentAuthRow extends AdminAuthRow {
+  study_group?: string | null;
+}
 
 interface AdminPublicRow {
   id: string;
@@ -15,6 +33,8 @@ interface AdminPublicRow {
 interface StudentPublicRow {
   id: string;
   username: string;
+  /** Present on every read since the column was added to an existing table. */
+  study_group?: string | null;
   created_at: Date;
   last_login_at: Date | null;
 }
@@ -89,9 +109,10 @@ export const adminRepository = {
 
 /** Data access for student accounts (created by the administrator only). */
 export const studentRepository = {
-  async findByUsername(username: string): Promise<AdminAuthRow | null> {
-    return queryOne<AdminAuthRow>(
-      `select id, username, password_hash, password_version, created_at, last_login_at
+  async findByUsername(username: string): Promise<StudentAuthRow | null> {
+    return queryOne<StudentAuthRow>(
+      `select id, username, password_hash, password_version, study_group,
+              created_at, last_login_at
          from students
         where username = $1`,
       [username],
@@ -101,7 +122,7 @@ export const studentRepository = {
   async findById(id: string): Promise<StudentPublic | null> {
     if (!isUuid(id)) return null;
     const row = await queryOne<StudentPublicRow>(
-      'select id, username, created_at, last_login_at from students where id = $1',
+      `select ${STUDENT_COLUMNS} from students where id = $1`,
       [id],
     );
     return row ? toStudentPublic(row) : null;
@@ -115,15 +136,46 @@ export const studentRepository = {
     return row !== null;
   },
 
-  async insert(username: string, passwordHash: string): Promise<StudentPublic> {
+  async insert(
+    username: string,
+    passwordHash: string,
+    group: StudentGroup,
+  ): Promise<StudentPublic> {
     const row = await queryOne<StudentPublicRow>(
-      `insert into students (username, password_hash)
-            values ($1, $2)
-         returning id, username, created_at, last_login_at`,
-      [username, passwordHash],
+      `insert into students (username, password_hash, study_group)
+            values ($1, $2, $3)
+         returning ${STUDENT_COLUMNS}`,
+      [username, passwordHash, group],
     );
     if (!row) throw new Error("Insertion de l'etudiant impossible.");
     return toStudentPublic(row)!;
+  },
+
+  /** Moves an existing student to the other group (teacher correction). */
+  async updateGroup(id: string, group: StudentGroup): Promise<StudentPublic | null> {
+    if (!isUuid(id)) return null;
+    const row = await queryOne<StudentPublicRow>(
+      `update students
+          set study_group = $2, updated_at = now()
+        where id = $1
+        returning ${STUDENT_COLUMNS}`,
+      [id, group],
+    );
+    return row ? toStudentPublic(row) : null;
+  },
+
+  /** Number of students per group, including groups with no student yet. */
+  async countByGroup(): Promise<Record<StudentGroup, number>> {
+    const rows = await query<{ study_group: string; total: string }>(
+      `select study_group, count(*)::text as total
+         from students
+        group by study_group`,
+    );
+    const counts: Record<StudentGroup, number> = { AI_LIBRE: 0, AI_GUIDEE: 0 };
+    for (const row of rows) {
+      counts[toStudentGroup(row.study_group)] = Number(row.total);
+    }
+    return counts;
   },
 
   /** Password version used to invalidate sessions after a reset. */
@@ -168,7 +220,7 @@ export const studentRepository = {
 
   async list(limit = 500, offset = 0): Promise<StudentPublic[]> {
     const rows = await query<StudentPublicRow>(
-      `select id, username, created_at, last_login_at
+      `select ${STUDENT_COLUMNS}
          from students
         order by created_at desc
         limit $1 offset $2`,
@@ -181,7 +233,7 @@ export const studentRepository = {
     const validIds = ids.filter(isUuid);
     if (validIds.length === 0) return [];
     const rows = await query<StudentPublicRow>(
-      'select id, username, created_at, last_login_at from students where id = any($1::uuid[])',
+      `select ${STUDENT_COLUMNS} from students where id = any($1::uuid[])`,
       [validIds],
     );
     return rows.map(toStudentPublic);
@@ -204,6 +256,7 @@ function toStudentPublic(row: StudentPublicRow): StudentPublic {
   return {
     id: row.id,
     username: row.username,
+    group: toStudentGroup(row.study_group),
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
   };

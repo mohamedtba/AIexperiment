@@ -3,6 +3,10 @@ import Link from 'next/link';
 import { Bot, ChevronRight, FileText, Users } from 'lucide-react';
 import { CreateStudentDialog } from '@/components/admin/create-student-dialog';
 import { ResetPasswordButton } from '@/components/admin/reset-password-button';
+import { ExportPdfButton } from '@/components/admin/export-pdf-button';
+import { ChangeStudentGroupButton } from '@/components/admin/change-student-group-button';
+import { GroupBadge } from '@/components/admin/group-badge';
+import { GroupFilter } from '@/components/admin/group-filter';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/alert';
@@ -10,19 +14,36 @@ import { PageHeader } from '@/components/shared/feedback';
 import { DateTime, RelativeTime } from '@/components/shared/date-time';
 import { Button } from '@/components/ui/button';
 import { getDictionary } from '@/i18n';
-import { listStudentsWithActivity } from '@/server/services/adminService';
+import { listStudentsWithActivity, getGroupCounts } from '@/server/services/adminService';
 import { getCurrentExperiment } from '@/server/services/experimentService';
+import { toStudentGroup } from '@/types';
 
 const t = getDictionary();
 
 export const metadata: Metadata = { title: t.students.title };
 export const dynamic = 'force-dynamic';
 
-export default async function AdminStudentsPage() {
-  const [students, experiment] = await Promise.all([
+export default async function AdminStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ groupe?: string }>;
+}) {
+  const [students, experiment, counts, params] = await Promise.all([
     listStudentsWithActivity(),
     getCurrentExperiment(),
+    getGroupCounts(),
+    searchParams,
   ]);
+
+  // An unknown or missing filter shows every group rather than an empty page.
+  const requested = params.groupe;
+  const filter =
+    requested === 'AI_LIBRE' || requested === 'AI_GUIDEE' ? requested : null;
+  const visible = filter ? students.filter((s) => s.group === filter) : students;
+
+  const summary = t.students.groupCounts
+    .replace('{libre}', String(counts.AI_LIBRE))
+    .replace('{guidee}', String(counts.AI_GUIDEE));
 
   return (
     <div className="space-y-6">
@@ -31,6 +52,16 @@ export default async function AdminStudentsPage() {
         subtitle={t.students.subtitle}
         actions={<CreateStudentDialog />}
       />
+
+      {students.length > 0 ? (
+        <GroupFilter
+          counts={counts}
+          active={filter}
+          summary={summary}
+          total={students.length}
+          shown={visible.length}
+        />
+      ) : null}
 
       {students.length === 0 ? (
         <Card>
@@ -51,6 +82,7 @@ export default async function AdminStudentsPage() {
               <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.username}</th>
+                  <th scope="col" className="px-5 py-3 font-medium">{t.students.group}</th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.createdAt}</th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.aiUsage}</th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.expressions}</th>
@@ -61,10 +93,13 @@ export default async function AdminStudentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {students.map((student) => (
+                {visible.map((student) => (
                   <tr key={student.id} className="transition-colors hover:bg-muted/40">
                     <td className="px-5 py-3">
                       <span className="font-mono font-semibold tracking-wide">{student.username}</span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <GroupBadge group={student.group} />
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
                       <DateTime value={student.createdAt} mode="date" />
@@ -89,7 +124,8 @@ export default async function AdminStudentsPage() {
                       <RelativeTime value={student.activity.lastActivityAt} />
                     </td>
                     <td className="px-5 py-3">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <ExportPdfButton studentId={student.id} />
                         <ResetPasswordButton studentId={student.id} />
                         <Button asChild variant="outline" size="xs">
                           <Link href={`/admin/etudiants/${student.id}`}>
@@ -107,7 +143,7 @@ export default async function AdminStudentsPage() {
 
           {/* Cartes (mobile) */}
           <ul className="space-y-3 lg:hidden">
-            {students.map((student) => (
+            {visible.map((student) => (
               <li key={student.id}>
                 <div className="rounded-lg border border-border bg-card p-4 shadow-card">
                   <Link
@@ -121,7 +157,11 @@ export default async function AdminStudentsPage() {
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                     </div>
 
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-2">
+                      <GroupBadge group={student.group} />
+                    </div>
+
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {t.students.createdAt} <DateTime value={student.createdAt} mode="date" />
                     </p>
 
@@ -157,7 +197,12 @@ export default async function AdminStudentsPage() {
                   </Link>
 
                   {/* Hors du lien : un bouton dans un lien serait inaccessible au clavier. */}
-                  <div className="mt-3 flex justify-end border-t border-border pt-3">
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
+                    <ChangeStudentGroupButton
+                      studentId={student.id}
+                      group={toStudentGroup(student.group)}
+                    />
+                    <ExportPdfButton studentId={student.id} size="sm" />
                     <ResetPasswordButton studentId={student.id} size="sm" />
                   </div>
                 </div>

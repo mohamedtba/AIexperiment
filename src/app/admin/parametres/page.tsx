@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import {
   Bot,
   CalendarDays,
+  Eraser,
   KeyRound,
   LogIn,
   Server,
@@ -12,6 +13,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AccessControl } from '@/components/admin/access-control';
+import { WipeDataButton } from '@/components/admin/wipe-data-button';
 import { PageHeader } from '@/components/shared/feedback';
 import { DateTime } from '@/components/shared/date-time';
 import { getDictionary } from '@/i18n';
@@ -19,6 +21,7 @@ import { formatDateTimeFr } from '@/lib/utils';
 import { getSession } from '@/server/auth/session';
 import { getAccessSettings } from '@/server/services/accessService';
 import { getAIProviderInfo } from '@/server/ai/aiService';
+import { getDataCounts } from '@/server/services/dataService';
 import { adminRepository } from '@/server/db/repositories/accounts';
 
 const t = getDictionary();
@@ -31,10 +34,11 @@ export default async function AdminSettingsPage() {
   if (!session) redirect('/connexion');
   if (session.role !== 'admin') redirect('/etudiant');
 
-  const [admin, access, ai] = await Promise.all([
+  const [admin, access, ai, dataCounts] = await Promise.all([
     adminRepository.findById(session.userId),
     getAccessSettings(),
     Promise.resolve(getAIProviderInfo()),
+    getDataCounts(),
   ]);
 
   const rows: Array<{ icon: typeof KeyRound; label: string; value: string }> = [
@@ -139,6 +143,24 @@ export default async function AdminSettingsPage() {
           </Card>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eraser className="h-4 w-4 text-destructive" aria-hidden />
+            {t.settings.dataTitle}
+          </CardTitle>
+          <CardDescription>{t.settings.dataSubtitle}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {t.settings.dataAccountsKept} : {dataCounts.accounts} ·{' '}
+            {t.settings.dataMessages} : {dataCounts.aiMessages} ·{' '}
+            {t.settings.dataVersions} : {dataCounts.expressionVersions}
+          </p>
+          <WipeDataButton />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

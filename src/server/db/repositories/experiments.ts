@@ -1,12 +1,15 @@
 import 'server-only';
 
-import { query, queryOne, withTransaction } from '../client';
+import { execute, query, queryOne, withTransaction } from '../client';
 import { isUuid } from '../ids';
 import { mapExperiment, type ExperimentRow } from '../rows';
 import type { Experiment } from '@/types';
 
 /**
  * Data access for experiments.
+ *
+ * `deleteAll()` is the only destructive statement in this file and is reserved
+ * for the explicit "erase the collected data" action of the teacher.
  *
  * The partial unique index `experiments_single_active` guarantees, at the
  * database level, that at most one experiment can be ACTIVE at any time; the
@@ -142,5 +145,10 @@ export const experimentRepository = {
       if (!stopped) throw new Error("Arret de l'experience impossible.");
       return mapExperiment(stopped);
     });
+  },
+
+  /** Deletes every experiment. Used by the "erase the collected data" action. */
+  async deleteAll(): Promise<number> {
+    return execute('delete from experiments');
   },
 };

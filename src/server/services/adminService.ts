@@ -15,6 +15,7 @@ import type {
   ExperimentStats,
   ExpressionVersion,
   StudentExperimentActivity,
+  StudentGroup,
   StudentPublic,
   StudentWithActivity,
 } from '@/types';
@@ -88,6 +89,14 @@ export async function listStudentsWithActivity(): Promise<StudentActivityRow[]> 
 }
 
 /** Complete view of a student for the administrator. */
+/**
+ * Per-group totals, used by the group filter of the student list so the teacher
+ * sees the size of each group without counting rows.
+ */
+export async function getGroupCounts(): Promise<Record<StudentGroup, number>> {
+  return studentRepository.countByGroup();
+}
+
 export async function getStudentDetail(
   studentId: string,
   experimentId?: string,

@@ -18,6 +18,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import { inflateSync } from 'node:zlib';
 
 const APP_PORT = 3137;
 const GEMINI_PORT = 4137;
@@ -32,6 +33,9 @@ const QUESTION_1 =
   "Rédigez un texte sur l'importance de la lecture dans la vie quotidienne.";
 const QUESTION_2 = 'Protection de l’environnement : quels sont vos engagements ?';
 const QUESTION_3 = 'Décrivez un lieu de votre enfance que vous n’oublierez jamais.';
+const QUESTION_4 = 'Expliquez pourquoi la lecture compte dans la vie quotidienne.';
+const QUESTION_5 = 'Racontez une rencontre qui a changé votre façon de voir les choses.';
+const QUESTION_6 = 'Décrivez un souvenir marquant de votre année dernière.';
 
 /* ------------------------------------------------------------------ results */
 const results = [];
@@ -258,6 +262,9 @@ async function run() {
     await checkRevokedSessionRedirects();
     await checkSingleScreenWorkspace();
     await checkExperimentStartStop();
+    await checkStudentGroups();
+    await checkPdfExport();
+    await checkWipeData();
     await checkLoginRateLimit();
   } catch (error) {
     console.error('\n\x1b[31mÉchec du test :\x1b[0m', error);
@@ -341,10 +348,15 @@ async function runTests() {
   const created = [];
   {
     for (let index = 0; index < 4; index += 1) {
-      const { response, data } = await admin.postJson('/api/admin/students', {});
-      const username = data?.student?.username ?? '';
-      const password = data?.password ?? '';
-      created.push({ username, password, id: data?.student?.id });
+      const { response, data } = await admin.postJson('/api/admin/students', {
+        group: 'AI_LIBRE',
+        quantity: 1,
+      });
+      // One request creates `quantity` accounts; here always a single one.
+      const account = data?.accounts?.[0] ?? {};
+      const username = account.username ?? '';
+      const password = account.password ?? '';
+      created.push({ username, password, id: account.id, group: account.group });
       check(
         `Compte étudiant ${index + 1} créé`,
         response.status === 201 && /^[a-z]{6}$/.test(username) && /^[0-9]{4}$/.test(password),
@@ -356,7 +368,10 @@ async function runTests() {
       new Set(created.map((item) => item.username)).size === created.length,
     );
 
-    const forbidden = await alice.postJson('/api/admin/students', {});
+    const forbidden = await alice.postJson('/api/admin/students', {
+      group: 'AI_LIBRE',
+      quantity: 1,
+    });
     check(
       'Un étudiant ne peut pas créer de compte',
       forbidden.response.status === 401,
@@ -696,10 +711,14 @@ async function runTests() {
   /* Réinitialisation du mot de passe d'un étudiant (administrateur) */
   group('10. Réinitialisation du mot de passe');
   {
-    const created2 = await admin.postJson('/api/admin/students');
-    const studentId = created2.data?.student?.id;
-    const username = created2.data?.student?.username;
-    const firstPassword = created2.data?.password;
+    const created2 = await admin.postJson('/api/admin/students', {
+      group: 'AI_LIBRE',
+      quantity: 1,
+    });
+    const account2 = created2.data?.accounts?.[0] ?? {};
+    const studentId = account2.id;
+    const username = account2.username;
+    const firstPassword = account2.password;
     check(
       'Création : mot de passe à 4 chiffres',
       /^[0-9]{4}$/.test(firstPassword ?? '') && /^[a-z]{6}$/.test(username ?? ''),
@@ -1345,11 +1364,14 @@ async function checkRevokedSessionRedirects() {
     password: ADMIN_PASSWORD,
   });
 
-  const account = await admin.postJson('/api/admin/students', {});
+  const account = (await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 1,
+  })).data?.accounts?.[0] ?? {};
   const student = createClient();
   await student.postJson('/api/auth/student/login', {
-    username: account.data?.student?.username,
-    password: account.data?.password,
+    username: account.username,
+    password: account.password,
   });
 
   const connected = await student.get('/etudiant');
@@ -1361,10 +1383,7 @@ async function checkRevokedSessionRedirects() {
 
   // The administrator resets the password: the signature stays valid, the
   // database no longer recognises the session.
-  const reset = await admin.postJson(
-    `/api/admin/students/${account.data?.student?.id}/password`,
-    {},
-  );
+  const reset = await admin.postJson(`/api/admin/students/${account.id}/password`, {});
   check(
     'Réinitialisation du mot de passe par l’administrateur',
     reset.response.status === 201 && /^[0-9]{4}$/.test(reset.data?.password ?? ''),
@@ -1413,7 +1432,7 @@ async function checkRevokedSessionRedirects() {
 
   // And the student must be able to log in again with the new password.
   const relogin = await student.postJson('/api/auth/student/login', {
-    username: account.data?.student?.username,
+    username: account.username,
     password: reset.data?.password,
   });
   check(
@@ -1470,11 +1489,14 @@ async function checkSingleScreenWorkspace() {
   });
   await admin.postJson('/api/admin/experiments', { question: QUESTION_3 });
 
-  const account = await admin.postJson('/api/admin/students', {});
+  const account = (await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 1,
+  })).data?.accounts?.[0] ?? {};
   const student = createClient();
   await student.postJson('/api/auth/student/login', {
-    username: account.data?.student?.username,
-    password: account.data?.password,
+    username: account.username,
+    password: account.password,
   });
 
   const { response, data } = await student.get('/etudiant');
@@ -1548,17 +1570,21 @@ async function checkExperimentStartStop() {
     password: ADMIN_PASSWORD,
   });
 
-  const account = await admin.postJson('/api/admin/students', {});
+  const account = await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 1,
+  });
+  const created = account.data?.accounts?.[0] ?? {};
   check(
     'Compte étudiant créé pour la vérification',
-    account.response.status === 201 && Boolean(account.data?.student?.username),
-    `${account.data?.student?.username ?? '—'} / ${account.data?.password ?? '—'}`,
+    account.response.status === 201 && Boolean(created.username),
+    `${created.username ?? '—'} / ${created.password ?? '—'}`,
   );
 
   const student = createClient();
   const studentLogin = await student.postJson('/api/auth/student/login', {
-    username: account.data?.student?.username,
-    password: account.data?.password,
+    username: created.username,
+    password: created.password,
   });
   check(
     'Connexion étudiante réussie',
@@ -1708,6 +1734,677 @@ async function checkExperimentStartStop() {
     'Le bouton d’arrêt est présent sur la page de l’expérience',
     /StopExperimentButton/.test(page),
     'src/app/admin/experience/page.tsx',
+  );
+}
+
+/**
+ * 24. The class is split into two groups, and a group can be corrected.
+ *
+ * The groups exist so the teacher can compare the written results between "IA
+ * libre" and "IA guidée". They are labels only, and this group proves the
+ * important half of that: the label never changes what the student sees or what
+ * the assistant answers.
+ */
+async function checkStudentGroups() {
+  group('24. Groupes d’étudiants (IA libre / IA guidée)');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+  await admin.postJson('/api/admin/experiments', { question: QUESTION_4 });
+
+  /* --- création groupée ------------------------------------------------- */
+
+  const libre = await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 3,
+  });
+  const libreAccounts = libre.data?.accounts ?? [];
+  check(
+    'Trois comptes créés d’un coup en IA libre',
+    libre.response.status === 201 &&
+      libreAccounts.length === 3 &&
+      libreAccounts.every((a) => a.group === 'AI_LIBRE'),
+    `${libreAccounts.length} comptes`,
+  );
+  check(
+    'Chaque compte a ses propres identifiants',
+    new Set(libreAccounts.map((a) => a.username)).size === 3 &&
+      libreAccounts.every((a) => /^[a-z]{6}$/.test(a.username) && /^[0-9]{4}$/.test(a.password)),
+    libreAccounts.map((a) => `${a.username}/${a.password}`).join(', '),
+  );
+
+  const guidee = await admin.postJson('/api/admin/students', {
+    group: 'AI_GUIDEE',
+    quantity: 2,
+  });
+  const guideeAccounts = guidee.data?.accounts ?? [];
+  check(
+    'Deux comptes créés en IA guidée',
+    guidee.response.status === 201 &&
+      guideeAccounts.length === 2 &&
+      guideeAccounts.every((a) => a.group === 'AI_GUIDEE'),
+    `${guideeAccounts.length} comptes`,
+  );
+  check(
+    'Les deux groupes ne partagent aucun identifiant',
+    libreAccounts.every(
+      (a) => !guideeAccounts.some((b) => b.username === a.username),
+    ),
+  );
+
+  /* --- bornes et validation --------------------------------------------- */
+
+  const zero = await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 0,
+  });
+  check(
+    'Zéro étudiant refusé (message en français)',
+    zero.response.status === 400 && /au moins un/i.test(zero.data?.error?.message ?? ''),
+    zero.data?.error?.message,
+  );
+
+  const tooMany = await admin.postJson('/api/admin/students', {
+    group: 'AI_LIBRE',
+    quantity: 51,
+  });
+  check(
+    'Plus de 50students refusé',
+    tooMany.response.status === 400 && /50/.test(tooMany.data?.error?.message ?? ''),
+    tooMany.data?.error?.message,
+  );
+
+  const badGroup = await admin.postJson('/api/admin/students', {
+    group: 'IA_AUTRE',
+    quantity: 1,
+  });
+  check(
+    'Groupe inconnu refusé',
+    badGroup.response.status === 400 && /groupe invalide/i.test(badGroup.data?.error?.message ?? ''),
+    badGroup.data?.error?.message,
+  );
+
+  const noGroup = await admin.postJson('/api/admin/students', { quantity: 1 });
+  check(
+    'Groupe manquant refusé',
+    noGroup.response.status === 400,
+    `HTTP ${noGroup.response.status}`,
+  );
+
+  const beforeBadRequest = await admin.get('/api/admin/students');
+  check(
+    'Aucun compte fantôme créé par les requêtes refusées',
+    (beforeBadRequest.data?.counts?.AI_LIBRE ?? 0) >= 3,
+    `${beforeBadRequest.data?.counts?.AI_LIBRE ?? 0} en IA libre`,
+  );
+
+  /* --- le groupe est renvoyé par l'API ----------------------------------- */
+
+  const listing = await admin.get('/api/admin/students');
+  const guidedRow = (listing.data?.students ?? []).find(
+    (row) => row.username === guideeAccounts[0]?.username,
+  );
+  check(
+    'Le groupe accompagne le compte dans la liste',
+    guidedRow?.group === 'AI_GUIDEE',
+    `${guidedRow?.username ?? '—'} : ${guidedRow?.group ?? '—'}`,
+  );
+  check(
+    'Le décompte par groupe est renvoyé',
+    (listing.data?.counts?.AI_GUIDEE ?? 0) >= 2 &&
+      (listing.data?.counts?.AI_LIBRE ?? 0) >= 3,
+    `${listing.data?.counts?.AI_LIBRE ?? 0} libre / ${listing.data?.counts?.AI_GUIDEE ?? 0} guidée`,
+  );
+
+  /* --- correction d'un groupe ------------------------------------------- */
+
+  const target = guidedRow ?? { id: '', username: '' };
+  const moved = await admin.patchJson(`/api/admin/students/${target.id}`, {
+    group: 'AI_LIBRE',
+  });
+  check(
+    'Un étudiant peut être déplacé dans l’autre groupe',
+    moved.response.status === 200 && moved.data?.student?.group === 'AI_LIBRE',
+    moved.data?.student?.group ?? '—',
+  );
+
+  const movedBack = await admin.patchJson(`/api/admin/students/${target.id}`, {
+    group: 'AI_GUIDEE',
+  });
+  check(
+    'Le déplacement inverse fonctionne aussi',
+    movedBack.response.status === 200 && movedBack.data?.student?.group === 'AI_GUIDEE',
+  );
+
+  const badMove = await admin.patchJson(`/api/admin/students/${target.id}`, {
+    group: 'N_IMPORTE_QUOI',
+  });
+  check(
+    'Groupe inconnu refusé à la correction',
+    badMove.response.status === 400,
+    badMove.data?.error?.message,
+  );
+
+  const ghost = await admin.patchJson(
+    '/api/admin/students/00000000-0000-4000-8000-000000000000',
+    { group: 'AI_LIBRE' },
+  );
+  check(
+    'Compte inexistant refusé (404)',
+    ghost.response.status === 404,
+    `HTTP ${ghost.response.status}`,
+  );
+
+  /* --- le groupe ne change rien pour l'étudiant -------------------------- */
+
+  const guided = guideeAccounts[0];
+  const client = createClient();
+  await client.postJson('/api/auth/student/login', {
+    username: guided.username,
+    password: guided.password,
+  });
+
+  const workspace = await client.get('/etudiant');
+  const guidedHtml = workspace.data?.html ?? '';
+  check(
+    'L’étudiant IA guidée utilise l’Assistant IA normalement',
+    workspace.response.status === 200 &&
+      guidedHtml.includes('textarea') &&
+      !guidedHtml.includes('aria-disabled="true"'),
+    `HTTP ${workspace.response.status}`,
+  );
+
+  const chat = await client.postJson('/api/student/ai/chat', {
+    content: 'Par où commencer mon texte ?',
+  });
+  check(
+    'Le groupe ne bloque pas l’échange avec l’IA',
+    chat.response.status === 200 && Boolean(chat.data?.assistantMessage?.content),
+    `HTTP ${chat.response.status} ${
+      chat.data?.assistantMessage?.content?.slice(0, 40) ?? chat.data?.error?.message ?? ''
+    }`,
+  );
+
+  // Same input, same assistant: the group is not part of the prompt. The question
+// itself must not mention the group either, or the check would be meaningless.
+  await client.postJson('/api/student/ai/chat', {
+    content: 'Une autre question, sans rien demander de particulier',
+  });
+  const lastPrompt = JSON.stringify(geminiCalls[geminiCalls.length - 1] ?? {});
+  check(
+    'Le groupe n’apparaît pas dans la requête envoyée au modèle',
+    !/AI_GUIDEE|AI_GUID|guid[ée]e|IA guid/i.test(lastPrompt),
+    'aucune mention du groupe dans le prompt',
+  );
+
+  const stillGuided = await admin.get(`/api/admin/students/${guided.id}`);
+  check(
+    'Le compte garde son groupe après les échanges',
+    stillGuided.data?.student?.group === 'AI_GUIDEE',
+    stillGuided.data?.student?.group ?? '—',
+  );
+
+  const forbidden = await client.patchJson(`/api/admin/students/${guided.id}`, {
+    group: 'AI_LIBRE',
+  });
+  check(
+    'Un étudiant ne peut pas changer son groupe',
+    forbidden.response.status === 403,
+    `HTTP ${forbidden.response.status}`,
+  );
+
+  /* --- interface --------------------------------------------------------- */
+
+  const studentsPage = await readSource('src/app/admin/etudiants/page.tsx');
+  check(
+    'Le groupe est affiché dans la liste des étudiants',
+    /GroupBadge/.test(studentsPage) && /students\.group/.test(studentsPage),
+    'src/app/admin/etudiants/page.tsx',
+  );
+  check(
+    'Un filtre par groupe est proposé',
+    /GroupFilter/.test(studentsPage) && /searchParams/.test(studentsPage),
+    'filtre dans l’URL',
+  );
+
+  const dialog = await readSource('src/components/admin/create-student-dialog.tsx');
+  check(
+    'La création propose les deux groupes et un nombre',
+    /AI_LIBRE/.test(dialog) && /AI_GUIDEE/.test(dialog) && /quantity/.test(dialog),
+    'create-student-dialog.tsx',
+  );
+
+  const rendered = await admin.get('/admin/etudiants');
+  const pageHtml = rendered.data?.html ?? '';
+  check(
+    'Les libellés des groupes sont en français',
+    pageHtml.includes('IA libre') && pageHtml.includes('IA guidée'),
+    'IA libre · IA guidée',
+  );
+}
+
+/**
+ * 25. The teacher downloads a real PDF of what a student produced.
+ *
+ * This is the artefact the whole experiment produces, so the check is on the file
+ * itself: it must be a valid PDF, it must name the student and the experiment, and
+ * the bytes must actually contain the words the student wrote — a page of French
+ * labels with an empty body would pass a naive content check.
+ */
+/**
+ * Characters of the WinAnsi block that differ from Latin-1 (bytes 0x80–0x9F).
+ *
+ * pdfkit encodes text with the WinAnsi encoding of the standard PDF fonts, where
+ * byte 0x92 is the curly apostrophe a reader sees. Node's TextDecoder does not
+ * ship windows-1252 in a minimal build and falls back to Latin-1, which would turn
+ * it into a control character and silently drop every French sentence containing
+ * one. The table is written out so the assertions below test the text a teacher
+ * really reads.
+ */
+const WIN_ANSI_EXTRAS = {
+  0x80: '€', 0x82: '‚', 0x83: 'ƒ', 0x84: '„', 0x85: '…',
+  0x86: '†', 0x87: '‡', 0x88: 'ˆ', 0x89: '‰', 0x8a: 'Š',
+  0x8b: '‹', 0x8c: 'Œ', 0x8e: 'Ž', 0x91: '‘', 0x92: '’',
+  0x93: '“', 0x94: '”', 0x95: '•', 0x96: '–', 0x97: '—',
+  0x98: '˜', 0x99: '™', 0x9a: 'š', 0x9b: '›', 0x9c: 'œ',
+  0x9e: 'ž', 0x9f: 'Ÿ',
+};
+
+function fromWinAnsi(hex) {
+  let out = '';
+  for (const byte of Buffer.from(hex, 'hex')) {
+    out += WIN_ANSI_EXTRAS[byte] ?? String.fromCharCode(byte);
+  }
+  return out;
+}
+
+/**
+ * Extracts the visible text of a PDF produced by pdfkit.
+ *
+ * pdfkit compresses the page content into a Flate stream and writes every string
+ * as hexadecimal, one byte per character, split at every kerning pair. A plain
+ * text search over the raw file therefore finds nothing, which would let the
+ * assertions below pass vacuously on a PDF whose body is empty. Both layers are
+ * decoded here — the Flate stream, then WinAnsi — and the fragments are
+ * concatenated, since pdfkit cuts a sentence wherever the kerning table asks.
+ */
+function extractPdfText(bytes) {
+  const raw = bytes.toString('latin1');
+  let decoded = raw;
+
+  for (const match of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try {
+      decoded += inflateSync(Buffer.from(match[1], 'latin1')).toString('latin1');
+    } catch {
+      // Not a compressed stream: the raw bytes already carry the content.
+    }
+  }
+
+  let text = '';
+  for (const match of decoded.matchAll(/<([0-9a-fA-F]{2,})>/g)) {
+    if (match[1].length % 2 !== 0) continue;
+    const value = fromWinAnsi(match[1]);
+    // Keep only runs free of control characters, so a binary blob is never read
+    // as a word.
+    if (value.trim().length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(value)) {
+      text += value;
+    }
+  }
+
+  return text;
+}
+
+async function checkPdfExport() {
+  group('25. Export PDF d’un étudiant');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+  await admin.postJson('/api/admin/experiments', { question: QUESTION_5 });
+
+  const account = (
+    await admin.postJson('/api/admin/students', { group: 'AI_GUIDEE', quantity: 1 })
+  ).data?.accounts?.[0] ?? {};
+
+  const client = createClient();
+  await client.postJson('/api/auth/student/login', {
+    username: account.username,
+    password: account.password,
+  });
+
+  const phrase = 'Les livres m’ont appris à regarder le monde autrement';
+  await client.postJson('/api/student/ai/chat', { content: 'Par quoi commencer ?' });
+  await client.postJson('/api/student/expressions', {
+    content: `${phrase}. Première version.`,
+  });
+  await client.postJson('/api/student/expressions', {
+    content: `${phrase}. Deuxième version, un peu plus développée.`,
+  });
+
+  const response = await admin.request(`/api/admin/students/${account.id}/export`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+
+  check(
+    'Le fichier exporté est un PDF',
+    response.status === 200 &&
+      response.headers.get('content-type') === 'application/pdf' &&
+      bytes.subarray(0, 5).toString('latin1') === '%PDF-',
+    `${bytes.byteLength} octets`,
+  );
+
+  const disposition = response.headers.get('content-disposition') ?? '';
+  check(
+    'Le téléchargement porte le nom de l’étudiant et de l’expérience',
+    disposition.startsWith('attachment') &&
+      disposition.includes(account.username) &&
+      disposition.includes('AI_GUIDEE'),
+    disposition,
+  );
+
+  const text = extractPdfText(bytes);
+  check(
+    'Le PDF contient l’identifiant de l’étudiant',
+    text.includes(account.username),
+    account.username,
+  );
+  check(
+    'Le PDF contient le libellé du groupe en français',
+    text.includes('IA guidée'),
+    'IA guidée',
+  );
+  check(
+    'Le PDF contient la question de l’expérience',
+    text.includes('rencontre qui a changé votre façon de voir'),
+    'question posée aux élèves',
+  );
+  check(
+    'Le PDF contient les titres des deux sections',
+    text.includes('Conversation IA') && text.includes('Expression écrite'),
+    'conversation + expression écrite',
+  );
+
+  const hasStudentText = text.includes('Les livres m’ont appris');
+  check(
+    'Le texte rédigé par l’étudiant figure bien dans le PDF',
+    hasStudentText,
+    hasStudentText ? 'texte retrouvé' : 'texte absent du fichier',
+  );
+  check(
+    'Les deux versions rédigées sont exportées',
+    text.includes('Première version') && text.includes('Deuxième version'),
+    'version 1 et version 2',
+  );
+  check(
+    'Les accents français sont préservés',
+    text.includes('Atelier d’écriture') &&
+      text.includes('Première version') &&
+      text.includes('développée'),
+    'encodage WinAnsi intact',
+  );
+  check(
+    'L’échange avec l’IA est exporté avec ses deux auteurs',
+    text.includes('Par quoi commencer') &&
+      text.includes('Réponse de test à'),
+    'message de l’élève et réponse du modèle',
+  );
+
+  const emptyExport = await admin.request(
+    `/api/admin/students/${account.id}/export?experimentId=00000000-0000-4000-8000-000000000000`,
+  );
+  check(
+    'Expérience inconnue refusée (404)',
+    emptyExport.status === 404,
+    `HTTP ${emptyExport.status}`,
+  );
+
+  const badId = await admin.request(
+    '/api/admin/students/pas-un-uuid/export',
+  );
+  check('Identifiant mal formé refusé', badId.status === 404, `HTTP ${badId.status}`);
+
+  const forbidden = await client.get(`/api/admin/students/${account.id}/export`);
+  check(
+    'Un étudiant ne peut pas exporter un PDF',
+    forbidden.response.status === 403,
+    `HTTP ${forbidden.response.status}`,
+  );
+
+  const anonymous = createClient();
+  const anonymousExport = await anonymous.get(`/api/admin/students/${account.id}/export`);
+  check(
+    'Un visiteur non connecté ne peut pas exporter un PDF',
+    anonymousExport.response.status === 401,
+    `HTTP ${anonymousExport.response.status}`,
+  );
+}
+
+/**
+ * 26. The teacher can empty the collected data, and only that.
+ *
+ * The permanent deletion has to be exactly what it promises: the transcripts and
+ * the writings go, the accounts stay usable. Getting that wrong in either
+ * direction is serious — losing a class's logins, or leaving the data in place
+ * while telling the teacher it is gone.
+ */
+async function checkWipeData() {
+  group('26. Suppression des données collectées');
+
+  const admin = createClient();
+  await admin.postJson('/api/auth/admin/login', {
+    username: ADMIN_USERNAME,
+    password: ADMIN_PASSWORD,
+  });
+  await admin.postJson('/api/admin/experiments', { question: QUESTION_6 });
+
+  const survivors = [];
+  for (const group of ['AI_LIBRE', 'AI_GUIDEE']) {
+    const batch = await admin.postJson('/api/admin/students', { group, quantity: 2 });
+    survivors.push(...(batch.data?.accounts ?? []));
+  }
+
+  const clients = [];
+  for (const account of survivors) {
+    const client = createClient();
+    await client.postJson('/api/auth/student/login', {
+      username: account.username,
+      password: account.password,
+    });
+    await client.postJson('/api/student/ai/chat', { content: 'Une question de test' });
+    await client.postJson('/api/student/expressions', {
+      content: 'Une expression écrite de test pour la suppression.',
+    });
+    clients.push(client);
+  }
+
+  const before = await admin.get('/api/admin/data');
+  const beforeCounts = before.data?.counts ?? {};
+  check(
+    'Les données à supprimer sont comptées',
+    (beforeCounts.aiMessages ?? 0) >= 8 &&
+      (beforeCounts.expressionVersions ?? 0) >= 4 &&
+      (beforeCounts.accounts ?? 0) >= 4,
+    `${beforeCounts.aiMessages ?? 0} messages · ${beforeCounts.expressionVersions ?? 0} expressions · ${beforeCounts.accounts ?? 0} comptes`,
+  );
+
+  /* --- le mot de confirmation protège contre une fausse manipulation ------- */
+
+  const noWord = await admin.postJson('/api/admin/data', { confirm: 'oui', experiments: false });
+  check(
+    'Sans le mot de confirmation, rien n’est supprimé',
+    noWord.response.status === 400,
+    noWord.data?.error?.message,
+  );
+
+  const wrongCase = await admin.postJson('/api/admin/data', {
+    confirm: 'supprimer',
+    experiments: false,
+  });
+  check(
+    'Le mot de confirmation est sensible à la casse',
+    wrongCase.response.status === 400,
+    `HTTP ${wrongCase.response.status}`,
+  );
+
+  const untouched = await admin.get('/api/admin/data');
+  check(
+    'Les données sont toujours là après les refus',
+    (untouched.data?.counts?.aiMessages ?? 0) === (beforeCounts.aiMessages ?? 0) &&
+      (untouched.data?.counts?.expressionVersions ?? 0) ===
+        (beforeCounts.expressionVersions ?? 0),
+    `${untouched.data?.counts?.aiMessages ?? 0} messages intacts`,
+  );
+
+  /* --- suppression réelle ------------------------------------------------ */
+
+  const wiped = await admin.postJson('/api/admin/data', {
+    confirm: 'SUPPRIMER',
+    experiments: false,
+  });
+  const deleted = wiped.data?.deleted ?? {};
+  check(
+    'Les messages et les expressions sont supprimés',
+    wiped.response.status === 200 &&
+      deleted.aiMessages === (beforeCounts.aiMessages ?? 0) &&
+      deleted.expressionVersions === (beforeCounts.expressionVersions ?? 0),
+    `${deleted.aiMessages ?? 0} messages · ${deleted.expressionVersions ?? 0} expressions`,
+  );
+
+  const after = await admin.get('/api/admin/data');
+  check(
+    'La base ne contient plus aucune conversation',
+    (after.data?.counts?.aiMessages ?? -1) === 0 &&
+      (after.data?.counts?.expressionVersions ?? -1) === 0,
+    `${after.data?.counts?.aiMessages ?? '?'} message(s), ${after.data?.counts?.expressionVersions ?? '?'} expression(s)`,
+  );
+  check(
+    'Les comptes sont conservés',
+    (after.data?.counts?.accounts ?? 0) >= 4,
+    `${after.data?.counts?.accounts ?? 0} comptes`,
+  );
+  check(
+    'L’expérience est conservée par défaut',
+    (after.data?.counts?.experiments ?? 0) >= 1,
+    `${after.data?.counts?.experiments ?? 0} expérience(s)`,
+  );
+
+  /* --- les comptes fonctionnent toujours ---------------------------------- */
+
+  const relogin = await clients[0].get('/etudiant');
+  const html = relogin.data?.html ?? '';
+  check(
+    'Un compte survit à la suppression et rouvre son espace',
+    relogin.response.status === 200 && html.includes('textarea'),
+    `HTTP ${relogin.response.status}`,
+  );
+
+  const firstVersion = await clients[0].postJson('/api/student/expressions', {
+    content: 'Une nouvelle version après le vidage des données.',
+  });
+  check(
+    'La première version repart bien à 1',
+    firstVersion.response.status === 201 && firstVersion.data?.version?.versionNumber === 1,
+    `version ${firstVersion.data?.version?.versionNumber ?? '—'}`,
+  );
+
+  const newChat = await clients[0].postJson('/api/student/ai/chat', {
+    content: 'Une question après le vidage',
+  });
+  check(
+    'La conversation repart d’un historique vide',
+    newChat.response.status === 200,
+    `HTTP ${newChat.response.status}`,
+  );
+
+  const conversations = await clients[0].get('/api/auth/session');
+  check(
+    'La session reste valide après la suppression',
+    conversations.response.status === 200,
+    `HTTP ${conversations.response.status}`,
+  );
+
+  /* --- suppression des expériences en option ----------------------------- */
+
+  const withExperiments = await admin.postJson('/api/admin/data', {
+    confirm: 'SUPPRIMER',
+    experiments: true,
+  });
+  check(
+    'Les expériences peuvent être supprimées explicitement',
+    withExperiments.response.status === 200 && withExperiments.data?.deleted?.experiments >= 1,
+    `${withExperiments.data?.deleted?.experiments ?? 0} expérience(s)`,
+  );
+
+  const finalCounts = await admin.get('/api/admin/data');
+  check(
+    'Plus aucune expérience ne subsiste',
+    (finalCounts.data?.counts?.experiments ?? -1) === 0,
+    `${finalCounts.data?.counts?.experiments ?? '?'} expérience(s)`,
+  );
+  check(
+    'Les comptes survivent à la suppression des expériences',
+    (finalCounts.data?.counts?.accounts ?? 0) >= 4,
+    `${finalCounts.data?.counts?.accounts ?? 0} comptes`,
+  );
+
+  const stopped = await clients[0].get('/etudiant');
+  const stoppedHtml = stopped.data?.html ?? '';
+  check(
+    'L’étudiant ne voit pas d’erreur une fois les expériences supprimées',
+    stopped.response.status === 200 &&
+      stoppedHtml.includes('pas encore démarré') &&
+      !stoppedHtml.includes('terminée'),
+    'écran « pas encore démarré »',
+  );
+
+  /* --- autorisations ----------------------------------------------------- */
+
+  const forbidden = await clients[0].postJson('/api/admin/data', {
+    confirm: 'SUPPRIMER',
+    experiments: false,
+  });
+  check(
+    'Un étudiant ne peut pas vider les données',
+    forbidden.response.status === 403,
+    `HTTP ${forbidden.response.status}`,
+  );
+
+  const anonymous = createClient();
+  const anonymousWipe = await anonymous.postJson('/api/admin/data', {
+    confirm: 'SUPPRIMER',
+    experiments: false,
+  });
+  check(
+    'Un visiteur non connecté ne peut pas vider les données',
+    anonymousWipe.response.status === 401,
+    `HTTP ${anonymousWipe.response.status}`,
+  );
+
+  /* --- le dernier groupe doit repartir ----------------------------------- */
+
+  const restarted = await admin.postJson('/api/admin/experiments', { question: QUESTION_1 });
+  check(
+    'Une nouvelle expérience peut démarrer après le vidage',
+    restarted.response.status === 201,
+    `n°${restarted.data?.experiment?.sequence ?? '—'}`,
+  );
+
+  const schema = await readSource('src/server/db/schema.ts');
+  check(
+    'La colonne du groupe existe avec ses deux valeurs',
+    /add column if not exists study_group/.test(schema) &&
+      /AI_LIBRE/.test(schema) &&
+      /AI_GUIDEE/.test(schema),
+    'students.study_group',
+  );
+  check(
+    'La colonne évite le mot réservé GROUP de PostgreSQL',
+    !/\bgroup\s+(text|integer|varchar)/.test(schema),
+    'study_group, pas group',
   );
 }
 

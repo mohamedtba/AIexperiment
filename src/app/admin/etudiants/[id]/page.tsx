@@ -4,6 +4,9 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, Bot, FileText, MessageSquare, PenLine, User } from 'lucide-react';
 import { StatCard } from '@/components/admin/stat-card';
 import { ResetPasswordButton } from '@/components/admin/reset-password-button';
+import { ExportPdfButton } from '@/components/admin/export-pdf-button';
+import { ChangeStudentGroupButton } from '@/components/admin/change-student-group-button';
+import { GroupBadge } from '@/components/admin/group-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -63,6 +66,9 @@ export default async function AdminStudentDetailPage({
                 {experiment.status === 'ACTIVE' ? ` · ${t.experiments.statusActive}` : ''}
               </Badge>
             ) : null}
+            <GroupBadge group={student.group} />
+            {experiment ? <ExportPdfButton studentId={student.id} experimentId={experiment.id} size="sm" /> : null}
+            <ChangeStudentGroupButton studentId={student.id} group={student.group} />
             <ResetPasswordButton studentId={student.id} size="sm" />
           </div>
         }

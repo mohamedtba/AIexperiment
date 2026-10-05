@@ -8,7 +8,7 @@ import { clientIp, rateLimit } from '../auth/rate-limit';
 import { getAccessSettings } from './accessService';
 import { generateCredentials, generatePassword } from './credentials';
 import type { SessionPayload } from '../auth/session';
-import type { AdminPublic, StudentPublic } from '@/types';
+import { toStudentGroup, type AdminPublic, type StudentGroup, type StudentPublic } from '@/types';
 
 export interface StudentLoginResult {
   student: StudentPublic;
@@ -47,6 +47,9 @@ export async function loginStudent(
     student: {
       id: student.id,
       username: student.username,
+      // Read from the account, never from the request: a student cannot choose
+      // their own group, and the value comes from the database anyway.
+      group: toStudentGroup(student.study_group),
       createdAt: student.created_at,
       lastLoginAt: new Date(),
     },
@@ -152,15 +155,32 @@ export async function loginAdmin(
   };
 }
 
-/** Creates a student account with a guaranteed unique username + password. */
-export async function createStudentAccount(): Promise<{
+export interface CreatedStudentAccount {
   student: StudentPublic;
   password: string;
-}> {
-  const credentials = await generateCredentials();
-  const passwordHash = await hashStudentPassword(credentials.password);
-  const student = await studentRepository.insert(credentials.username, passwordHash);
-  return { student, password: credentials.password };
+}
+
+/**
+ * Creates `quantity` student accounts, all in the same study group.
+ *
+ * A class is split into two groups, so the teacher needs to create a whole group
+ * at once. Each account gets its own generated credentials, returned once and
+ * never again: the password cannot be recovered, only reset.
+ */
+export async function createStudentAccounts(
+  group: StudentGroup,
+  quantity: number,
+): Promise<CreatedStudentAccount[]> {
+  const accounts: CreatedStudentAccount[] = [];
+
+  for (let index = 0; index < quantity; index += 1) {
+    const credentials = await generateCredentials();
+    const passwordHash = await hashStudentPassword(credentials.password);
+    const student = await studentRepository.insert(credentials.username, passwordHash, group);
+    accounts.push({ student, password: credentials.password });
+  }
+
+  return accounts;
 }
 
 /**

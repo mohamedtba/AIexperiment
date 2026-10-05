@@ -1,6 +1,12 @@
 import { createRouteHandler, jsonOk } from '@/lib/api';
+import {
+  updateStudentGroupSchema,
+  type UpdateStudentGroupInput,
+} from '@/lib/validation';
+import { AppError } from '@/lib/errors';
 import { requireAdmin } from '@/server/auth/guards';
 import { getStudentDetail } from '@/server/services/adminService';
+import { studentRepository } from '@/server/db/repositories/accounts';
 
 interface Context {
   params: Promise<{ id: string }>;
@@ -17,6 +23,7 @@ export const GET = createRouteHandler<never, Context>({
       student: {
         id: detail.student.id,
         username: detail.student.username,
+        group: detail.student.group,
         createdAt: detail.student.createdAt.toISOString(),
         lastLoginAt: detail.student.lastLoginAt?.toISOString() ?? null,
       },
@@ -37,6 +44,30 @@ export const GET = createRouteHandler<never, Context>({
         ...version,
         createdAt: version.createdAt.toISOString(),
       })),
+    });
+  },
+});
+
+/**
+ * PATCH /api/admin/students/[id] — moves a student to the other group.
+ *
+ * Only the label changes: the conversation and the versions already written stay
+ * exactly where they are, so a misfiled student can be corrected afterwards.
+ */
+export const PATCH = createRouteHandler<UpdateStudentGroupInput, Context>({
+  body: updateStudentGroupSchema,
+  handler: async (_request, context, input) => {
+    await requireAdmin();
+    const { id } = await context.params;
+    const student = await studentRepository.updateGroup(id, input.group);
+    if (!student) throw new AppError('STUDENT_NOT_FOUND', 404);
+
+    return jsonOk({
+      student: {
+        id: student.id,
+        username: student.username,
+        group: student.group,
+      },
     });
   },
 });

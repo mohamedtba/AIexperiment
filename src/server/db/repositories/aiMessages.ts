@@ -99,6 +99,11 @@ export const aiMessageRepository = {
     return rows.map(mapAIMessage);
   },
 
+  /** Total number of stored messages, across every experiment. */
+  async countAll(): Promise<number> {
+    return count('true', []);
+  },
+
   /** Per-student counters for one experiment (dashboard / participants table). */
   async aggregateByStudent(experimentId: string): Promise<
     Array<{ studentId: string; count: number; lastActivityAt: Date }>

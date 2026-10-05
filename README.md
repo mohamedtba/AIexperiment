@@ -39,7 +39,10 @@ The administrator can suspend student access globally, browse every conversation
 ### Administrator
 
 - **Tableau de bord** — statistics of the active experiment (students, AI messages, versions), recent activity, quick access to the access switch.
-- **Étudiants** — generates student accounts. Each username is exactly **6 lowercase letters**, each password exactly **4 digits**; uniqueness is verified at the database level (unique index) and in the service.
+- **Étudiants** — generates student accounts. Each username is exactly **6 lowercase letters**, each password exactly **4 digits**; uniqueness is verified at the database level (unique index) and in the service. Accounts are created in batches of 1–50 and assigned to one of the two study groups.
+- **Groupes (IA libre / IA guidée)** — every account belongs to one of two groups, chosen at creation and changeable afterwards. The group is a **label only**: it is displayed on the student list, shown on the student sheet and included in the PDF export, but it does **not** change how the AI assistant answers.
+- **Export PDF** (per student, in the list and on the student sheet) — downloads a real PDF of that student for the current experiment: identity, group, question, the full AI conversation and every writing version, French accents preserved. Passing `?experimentId=` exports an archived experiment instead.
+- **Vider les données collectées** (Paramètres) — permanently deletes every AI message and every writing version in one transaction. The student accounts always survive, and experiments are only deleted when the administrator explicitly checks the box. A typed `SUPPRIMER` confirmation and the exact figures are required before anything is removed.
 - **Nouveau mot de passe** (per student, in the list and on the student sheet) — generates a **new 4-digit password**, displayed once, for a student who lost theirs. Passwords are bcrypt hashes and can never be read back, so this generates a new one instead of showing the old one. The sessions opened with the previous password are revoked immediately (`passwordVersion` claim), the student is returned to the login screen and must re-authenticate.
 - **Étudiant (detail)** — full AI conversation and all writing versions of that student for a given experiment.
 - **Expérience actuelle** — starts a new experiment (the “question of the day”). Starting a new one **archives** the previous experiment; all of its data is preserved.
@@ -269,7 +272,7 @@ The harness is not a mock: it starts a **real production build** (`next start`) 
 - a **real PostgreSQL** ([PGlite](https://pglite.dev), the official Postgres compiled to WebAssembly and exposed over TCP, so `pg` connects to it exactly as it would to Neon — no Docker and no local server required),
 - a **local Gemini-compatible endpoint** (no API key, no internet required),
 
-then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **111/111 checks green**, in 16 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, password reset, archives, global access switch, new experiment, logout, French-only UI, and secret exposure.
+then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **226/226 checks green**, in 26 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, password reset, archives, global access switch, workspace layout, experiment start/stop, student groups, PDF export, data wipe, login rate limit, new experiment, logout, French-only UI, and secret exposure.
 
 ---
 

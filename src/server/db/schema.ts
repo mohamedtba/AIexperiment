@@ -12,6 +12,9 @@ import 'server-only';
  *    even at the database level, to have two ACTIVE experiments at the same time.
  *  - `expression_versions` is unique per (student, experiment, version number)
  *    and per idempotency key, which protects against duplicated submissions.
+ *  - `students.study_group` records the study group (IA libre / IA guidée) so the
+ *    teacher can compare the two groups afterwards. It is a label only: the
+ *    assistant behaves identically for both groups.
  *
  * No foreign key is declared on purpose: the transcripts and the writing
  * versions are experiment archives that must survive the deletion of an
@@ -38,6 +41,19 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
    )`,
   `create unique index if not exists students_username_unique on students (username)`,
   `create index if not exists students_created_at on students (created_at desc)`,
+
+  /**
+   * Study group of the student: IA_LIBRE or IA_GUIDEE.
+   *
+   * Added after the table was first created, so the statement is idempotent and
+   * an existing database simply gains the column, defaulting to IA_LIBRE. This is
+   * purely an administrative label: it is displayed and exported, but it never
+   * changes how the assistant answers.
+   */
+  `alter table students
+       add column if not exists study_group text not null default 'AI_LIBRE'
+       check (study_group in ('AI_LIBRE', 'AI_GUIDEE'))`,
+  `create index if not exists students_study_group on students (study_group)`,
 
   `create table if not exists experiments (
      id          uuid primary key default gen_random_uuid(),

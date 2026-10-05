@@ -125,11 +125,30 @@ export const admin = {
   daysAgo: 'il y a {n} j',
 } as const;
 
+/**
+ * The two study groups. This is an administrative label only: the assistant
+ * answers the same way in both groups, so the teacher can compare the written
+ * results afterwards.
+ */
+export const groups = {
+  AI_LIBRE: 'IA libre',
+  AI_GUIDEE: 'IA guidée',
+  label: 'Groupe',
+  all: 'Tous les groupes',
+  description:
+    'Répartissez la classe en deux groupes. Le choix n’a aucune influence sur les réponses de l’Assistant IA : il sert uniquement à comparer les résultats entre les deux groupes.',
+  free: 'IA libre',
+  guided: 'IA guidée',
+  freeDetail: 'L’étudiant conduit seul sa réflexion.',
+  guidedDetail: 'Même assistant, même question : seul le groupe est mémorisé.',
+} as const;
+
 export const students = {
   title: 'Étudiants',
   subtitle: 'Tous les comptes créés pour l’expérience',
-  create: 'Créer un étudiant',
+  create: 'Créer un ou plusieurs étudiants',
   username: 'Identifiant',
+  group: 'Groupe',
   createdAt: 'Créé le',
   lastLogin: 'Dernière connexion',
   activity: 'Activité expérience en cours',
@@ -142,19 +161,37 @@ export const students = {
   empty: 'Aucun étudiant pour le moment.',
   emptyHint:
     'Créez le premier compte étudiant : un identifiant de 6 lettres et un mot de passe de 4 chiffres sont générés automatiquement.',
-  createTitle: 'Créer un étudiant',
+  createTitle: 'Créer des comptes étudiants',
   createIntro:
-    'Un identifiant et un mot de passe seront générés automatiquement. Notez-les : le mot de passe ne sera plus jamais affiché.',
+    'Choisissez le groupe et le nombre d’étudiants à créer. Un identifiant de 6 lettres et un mot de passe de 4 chiffres sont générés automatiquement pour chacun.',
+  groupLabel: 'Groupe',
+  groupHint: 'Le groupe n’affecte pas les réponses de l’IA, seulement le classement des résultats.',
+  quantityLabel: 'Nombre d’étudiants',
+  quantityHint: 'Entre 1 et 50 comptes.',
   creating: 'Création…',
-  credentialsTitle: 'Compte créé',
+  credentialsTitle: 'Comptes créés',
   credentialsBody:
+    'Communiquez ces identifiants aux étudiants. Les mots de passe ne pourront plus être récupérés ensuite : ils devront être réinitialisés un par un.',
+  credentialsBodySingle:
     'Communiquez ces identifiants à l’étudiant. Le mot de passe ne peut pas être récupéré ensuite.',
   credentialsUsername: 'Identifiant',
   credentialsPassword: 'Mot de passe',
   copyAll: 'Copier les identifiants',
+  copyAllList: 'Copier la liste',
   copyUsername: 'Copier l’identifiant',
   copyPassword: 'Copier le mot de passe',
   created: 'Étudiant créé',
+  createdMany: '{n} comptes créés',
+  filterLabel: 'Filtrer par groupe',
+  groupCounts: '{libre} en IA libre · {guidee} en IA guidée',
+  exportPdf: 'Exporter en PDF',
+  exportPdfLoading: 'Génération…',
+  exportPdfSuccess: 'PDF téléchargé',
+  changeGroup: 'Changer de groupe',
+  changeGroupTitle: 'Changer de groupe',
+  changeGroupIntro:
+    'Le compte passe dans l’autre groupe. Sa conversation et ses versions ne changent pas.',
+  groupChanged: 'Groupe mis à jour',
   resetPassword: 'Nouveau mot de passe',
   resetPasswordTitle: 'Réinitialiser le mot de passe',
   resetPasswordIntro:
@@ -227,6 +264,29 @@ export const experiments = {
 } as const;
 
 export const settings = {
+  dataTitle: 'Données collectées',
+  dataSubtitle:
+    'Suppression définitive des conversations et des expressions écrites des étudiants',
+  dataWarning:
+    'Cette action est irréversible. Exportez d’abord les PDF dont vous avez besoin : les conversations et les versions ne pourront plus être consultées.',
+  dataAccountsKept: 'Comptes conservés',
+  dataMessages: 'Messages IA à supprimer',
+  dataVersions: 'Expressions écrites à supprimer',
+  dataExperiments: 'Expériences à supprimer',
+  dataExperimentsOptional: 'Supprimer aussi les expériences',
+  dataExperimentsOptionalHint:
+    'Les questions posées aux étudiants disparaîtront elles aussi. Les comptes étudiants restent utilisables.',
+  dataConfirmLabel: 'Tapez SUPPRIMER pour confirmer',
+  dataConfirmWord: 'SUPPRIMER',
+  dataWipe: 'Vider les données collectées',
+  dataWipeTitle: 'Supprimer définitivement les données collectées ?',
+  dataWipeBody:
+    'Toutes les conversations avec l’Assistant IA et toutes les expressions écrites seront supprimées. Les comptes étudiants et leurs identifiants resteront utilisables : les étudiants perdront simplement l’historique de leur travail.',
+  dataWiping: 'Suppression…',
+  dataWiped: 'Données supprimées',
+  dataWipedDetail:
+    '{messages} messages et {versions} expressions supprimées. Les comptes sont conservés.',
+  dataNothing: 'Aucune donnée à supprimer pour le moment.',
   title: 'Paramètres',
   subtitle: 'Informations techniques et sécurité',
   profile: 'Profil administrateur',
@@ -349,6 +409,7 @@ export const fr = {
   nav,
   auth,
   admin,
+  groups,
   students,
   experiments,
   settings,

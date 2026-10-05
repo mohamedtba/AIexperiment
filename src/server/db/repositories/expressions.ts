@@ -133,6 +133,11 @@ export const expressionRepository = {
     return Number(row?.total ?? 0);
   },
 
+  /** Total number of stored versions, across every experiment. */
+  async countAll(): Promise<number> {
+    return count('true', []);
+  },
+
   /** Per-student counters for one experiment (dashboard / participants table). */
   async aggregateByStudent(experimentId: string): Promise<
     Array<{ studentId: string; count: number; lastActivityAt: Date }>

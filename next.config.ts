@@ -19,9 +19,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  // The PostgreSQL driver (and bcrypt) rely on Node.js built-ins: they must
-  // stay external packages instead of being bundled by webpack.
-  serverExternalPackages: ['pg', 'pg-native', 'bcryptjs'],
+  // The PostgreSQL driver, bcrypt and pdfkit rely on Node.js internals and ship
+  // their own data files: they must stay external packages instead of being
+  // bundled by webpack.
+  serverExternalPackages: ['pg', 'pg-native', 'bcryptjs', 'pdfkit', 'fontkit'],
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
