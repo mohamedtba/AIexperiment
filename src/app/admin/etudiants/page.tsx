@@ -6,6 +6,7 @@ import { ResetPasswordButton } from '@/components/admin/reset-password-button';
 import { ExportPdfButton } from '@/components/admin/export-pdf-button';
 import { ChangeStudentGroupButton } from '@/components/admin/change-student-group-button';
 import { GroupBadge } from '@/components/admin/group-badge';
+import { DeleteStudentButton } from '@/components/admin/delete-student-button';
 import { GroupFilter } from '@/components/admin/group-filter';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -133,6 +134,7 @@ export default async function AdminStudentsPage({
                             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
                           </Link>
                         </Button>
+                        <DeleteStudentButton studentId={student.id} />
                       </div>
                     </td>
                   </tr>
@@ -204,6 +206,7 @@ export default async function AdminStudentsPage({
                     />
                     <ExportPdfButton studentId={student.id} size="sm" />
                     <ResetPasswordButton studentId={student.id} size="sm" />
+                    <DeleteStudentButton studentId={student.id} />
                   </div>
                 </div>
               </li>

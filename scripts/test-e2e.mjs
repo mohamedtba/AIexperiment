@@ -2047,6 +2047,42 @@ async function checkStudentGroups() {
     `HTTP ${backLogin.response.status}`,
   );
 
+  /* --- suppression d’un étudiant ---------------------------------------- */
+
+  const studentDb = libreAccounts[0];
+  const deleteResponse = await admin.request(`/api/admin/students/${studentDb.id}`, {
+    method: 'DELETE',
+  });
+  check(
+    'La suppression d’un étudiant répond 200',
+    deleteResponse.status === 200,
+    `HTTP ${deleteResponse.status}`,
+  );
+
+  const loginAfterDelete = await createClient().postJson('/api/auth/student/login', {
+    username: studentDb.username,
+    password: studentDb.password,
+  });
+  check(
+    'Un étudiant supprimé ne peut plus se connecter',
+    loginAfterDelete.response.status === 401,
+    `HTTP ${loginAfterDelete.response.status}`,
+  );
+
+  const detailAfterDelete = await admin.get(`/api/admin/students/${studentDb.id}`);
+  check(
+    'La fiche de l’étudiant supprimé renvoie 404',
+    detailAfterDelete.response.status === 404,
+    `HTTP ${detailAfterDelete.response.status}`,
+  );
+
+  const studentRoleApi = await client.request(`/api/admin/students/${studentDb.id}`, { method: 'DELETE' });
+  check(
+    'Un étudiant ne peut pas supprimer de compte',
+    studentRoleApi.status === 403,
+    `HTTP ${studentRoleApi.status}`,
+  );
+
   /* --- interface --------------------------------------------------------- */
 
   const studentsPage = await readSource('src/app/admin/etudiants/page.tsx');

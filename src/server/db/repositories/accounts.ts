@@ -250,6 +250,13 @@ export const studentRepository = {
     if (!isUuid(id)) return;
     await execute('update students set last_login_at = now() where id = $1', [id]);
   },
+
+  /** Permanently removes an account. Returns true when a row existed. */
+  async delete(id: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    const removed = await execute('delete from students where id = $1', [id]);
+    return removed > 0;
+  },
 };
 
 function toStudentPublic(row: StudentPublicRow): StudentPublic {

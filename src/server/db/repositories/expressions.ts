@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { query, queryOne } from '../client';
+import { execute, query, queryOne } from '../client';
 import { isUniqueViolation, isUuid } from '../ids';
 import { counterRepository } from './settings';
 import { mapExpressionVersion, type ExpressionVersionRow } from '../rows';
@@ -155,6 +155,12 @@ export const expressionRepository = {
       count: row.count,
       lastActivityAt: row.last_activity_at,
     }));
+  },
+
+  /** Removes every written version of a student (used when the account is deleted). */
+  async deleteForStudent(studentId: string): Promise<number> {
+    if (!isUuid(studentId)) return 0;
+    return execute('delete from expression_versions where student_id = $1', [studentId]);
   },
 };
 

@@ -5,7 +5,7 @@ import {
 } from '@/lib/validation';
 import { AppError } from '@/lib/errors';
 import { requireAdmin } from '@/server/auth/guards';
-import { getStudentDetail } from '@/server/services/adminService';
+import { deleteStudent, getStudentDetail } from '@/server/services/adminService';
 import { studentRepository } from '@/server/db/repositories/accounts';
 
 interface Context {
@@ -69,5 +69,19 @@ export const PATCH = createRouteHandler<UpdateStudentGroupInput, Context>({
         group: student.group,
       },
     });
+  },
+});
+
+/**
+ * DELETE /api/admin/students/[id] — permanently removes the account and the
+ * data it produced. The password reset and chat history of that student are
+ * gone; experiments and other accounts survive.
+ */
+export const DELETE = createRouteHandler<never, Context>({
+  handler: async (_request, context) => {
+    await requireAdmin();
+    const { id } = await context.params;
+    const removed = await deleteStudent(id);
+    return jsonOk({ deleted: removed });
   },
 });

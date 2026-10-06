@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { query, queryOne } from '../client';
+import { execute, query, queryOne } from '../client';
 import { isUuid } from '../ids';
 import { mapAIMessage, type AIMessageRow } from '../rows';
 import type { AIMessage, AIMessageRole } from '@/types';
@@ -121,6 +121,12 @@ export const aiMessageRepository = {
       count: row.count,
       lastActivityAt: row.last_activity_at,
     }));
+  },
+
+  /** Removes every stored message of a student (used when the account is deleted). */
+  async deleteForStudent(studentId: string): Promise<number> {
+    if (!isUuid(studentId)) return 0;
+    return execute('delete from ai_messages where student_id = $1', [studentId]);
   },
 };
 

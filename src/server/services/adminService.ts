@@ -97,6 +97,22 @@ export async function getGroupCounts(): Promise<Record<StudentGroup, number>> {
   return studentRepository.countByGroup();
 }
 
+/**
+ * Permanently deletes a student account and everything the account produced
+ * (AI messages and writing versions). Experiments and other accounts are kept.
+ * Returns the removed counts so the administrator sees what was erased.
+ */
+export async function deleteStudent(studentId: string): Promise<{ messages: number; versions: number }> {
+  const student = await studentRepository.findById(studentId);
+  if (!student) throw new AppError('STUDENT_NOT_FOUND', 404);
+
+  const messages = await aiMessageRepository.deleteForStudent(studentId);
+  const versions = await expressionRepository.deleteForStudent(studentId);
+  await studentRepository.delete(studentId);
+
+  return { messages, versions };
+}
+
 export async function getStudentDetail(
   studentId: string,
   experimentId?: string,

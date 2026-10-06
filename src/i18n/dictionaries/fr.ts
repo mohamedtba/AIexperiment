@@ -192,6 +192,12 @@ export const students = {
   changeGroupIntro:
     'Le compte passe dans l’autre groupe. Sa conversation et ses versions ne changent pas.',
   groupChanged: 'Groupe mis à jour',
+  deleteStudent: 'Supprimer l’étudiant',
+  deleteStudentTitle: 'Supprimer définitivement l’étudiant ?',
+  deleteStudentBody:
+    'Le compte, sa conversation IA et toutes ses expressions écrites seront supprimés. Les expériences et les autres comptes sont conservés.',
+  deleteStudentConfirm: 'Supprimer',
+  deleteStudentSuccess: 'Étudiant supprimé',
   resetPassword: 'Nouveau mot de passe',
   resetPasswordTitle: 'Réinitialiser le mot de passe',
   resetPasswordIntro:

@@ -7,6 +7,7 @@ import { ResetPasswordButton } from '@/components/admin/reset-password-button';
 import { ExportPdfButton } from '@/components/admin/export-pdf-button';
 import { ChangeStudentGroupButton } from '@/components/admin/change-student-group-button';
 import { GroupBadge } from '@/components/admin/group-badge';
+import { DeleteStudentButton } from '@/components/admin/delete-student-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,6 +71,7 @@ export default async function AdminStudentDetailPage({
             {experiment ? <ExportPdfButton studentId={student.id} experimentId={experiment.id} size="sm" /> : null}
             <ChangeStudentGroupButton studentId={student.id} group={student.group} />
             <ResetPasswordButton studentId={student.id} size="sm" />
+            <DeleteStudentButton studentId={student.id} />
           </div>
         }
       />
