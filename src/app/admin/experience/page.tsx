@@ -39,9 +39,6 @@ export default async function CurrentExperimentPage() {
               <CardTitle className="flex flex-wrap items-center gap-2">
                 {t.admin.experimentQuestion}
                 <Badge variant="success">{t.experiments.statusActive}</Badge>
-                <Badge variant="outline">
-                  {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
-                </Badge>
               </CardTitle>
               <CardDescription className="mt-1">
                 {t.experiments.startedAt} {formatDateTimeFr(experiment.startedAt)} ·{' '}

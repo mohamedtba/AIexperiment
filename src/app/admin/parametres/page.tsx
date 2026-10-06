@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import {
   Bot,
-  CalendarDays,
   Eraser,
   KeyRound,
   LogIn,
@@ -44,11 +43,6 @@ export default async function AdminSettingsPage() {
 
   const rows: Array<{ icon: typeof KeyRound; label: string; value: string }> = [
     { icon: KeyRound, label: t.settings.username, value: admin?.username ?? session.username },
-    {
-      icon: CalendarDays,
-      label: t.settings.createdAt,
-      value: admin ? formatDateTimeFr(admin.createdAt) : '—',
-    },
     {
       icon: LogIn,
       label: t.settings.lastLogin,
