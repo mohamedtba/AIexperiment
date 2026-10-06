@@ -1986,6 +1986,67 @@ async function checkStudentGroups() {
     `HTTP ${forbidden.response.status}`,
   );
 
+  /* --- le commutateur d’accès par groupe ---------------------------------- */
+
+  async function setGroupAccess(group, allowed) {
+    const response = await admin.request('/api/admin/access', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ group, allowed }),
+    });
+    return response;
+  }
+
+  const disableLibre = await setGroupAccess('AI_LIBRE', false);
+  const libreState = await admin.get('/api/admin/access');
+  check(
+    'Suspension d’un groupe renvoyée par l’API',
+    disableLibre.status === 200 &&
+      libreState.data?.loginAiLibre === false &&
+      libreState.data?.loginAiGuidee === true,
+    `libre=${libreState.data?.loginAiLibre} guidée=${libreState.data?.loginAiGuidee}`,
+  );
+
+  const blockedLogin = await createClient().postJson('/api/auth/student/login', {
+    username: libreAccounts[0].username,
+    password: libreAccounts[0].password,
+  });
+  check(
+    'Un étudiant du groupe suspendu ne peut plus se connecter',
+    blockedLogin.response.status === 403 &&
+      /suspendue/.test(blockedLogin.data?.error?.message ?? ''),
+    blockedLogin.data?.error?.message,
+  );
+
+  const guidedStill = await client.get('/etudiant');
+  check(
+    'Un étudiant du groupe autorisé garde son accès',
+    guidedStill.response.status === 200,
+    `HTTP ${guidedStill.response.status}`,
+  );
+
+  const studentPatch = await client.request('/api/admin/access', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ group: 'AI_LIBRE', allowed: false }),
+  });
+  check(
+    'Un étudiant ne peut pas modifier l’accès par groupe',
+    studentPatch.status === 403,
+    `HTTP ${studentPatch.status}`,
+  );
+
+  await setGroupAccess('AI_LIBRE', true);
+  const backLogin = await createClient().postJson('/api/auth/student/login', {
+    username: libreAccounts[0].username,
+    password: libreAccounts[0].password,
+  });
+  check(
+    'Réouverture d’un groupe : la connexion fonctionne à nouveau',
+    backLogin.response.status === 200,
+    `HTTP ${backLogin.response.status}`,
+  );
+
   /* --- interface --------------------------------------------------------- */
 
   const studentsPage = await readSource('src/app/admin/etudiants/page.tsx');

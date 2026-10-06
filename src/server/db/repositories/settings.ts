@@ -6,7 +6,7 @@ import type { AccessSettings } from '@/types';
 
 const SETTINGS_KEY = 'global';
 
-const SELECT_ACCESS = `select student_access_enabled, access_epoch, updated_at, disabled_at
+const SELECT_ACCESS = `select student_access_enabled, access_epoch, updated_at, disabled_at, login_ai_libre, login_ai_guidee
                          from system_settings
                         where key = $1`;
 
@@ -35,6 +35,24 @@ export const settingsRepository = {
       [SETTINGS_KEY, enabled],
     );
     if (!row) throw new Error("Mise a jour des reglages impossible.");
+    return mapAccessSettings(row);
+  },
+
+  /**
+   * Enables or forbids a single student group to sign in. The existing session
+   * of the forbidden group is refused on the next request, the other group's
+   * sessions are untouched.
+   */
+  async setGroupLoginAllowed(group: 'AI_LIBRE' | 'AI_GUIDEE', allowed: boolean): Promise<AccessSettings> {
+    const column = group === 'AI_LIBRE' ? 'login_ai_libre' : 'login_ai_guidee';
+    // The column name is fixed by the branch above; only the value is a bound param.
+    const row = await queryOne<AccessSettingsRow>(
+      `update system_settings set ${column} = $2, updated_at = now() where key = $1
+        returning student_access_enabled, access_epoch, updated_at, disabled_at,
+                  login_ai_libre, login_ai_guidee`,
+      [SETTINGS_KEY, allowed],
+    );
+    if (!row) throw new Error('Mise a jour des reglages impossible.');
     return mapAccessSettings(row);
   },
 };

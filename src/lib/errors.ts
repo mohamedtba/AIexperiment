@@ -7,6 +7,8 @@ export const ERROR_MESSAGES = {
   // Authentification
   INVALID_CREDENTIALS: "Nom d'utilisateur ou mot de passe incorrect.",
   STUDENT_ACCESS_DISABLED: "L'accès aux étudiants est actuellement désactivé.",
+  GROUP_LOGIN_DISABLED:
+    'La connexion des étudiants de ce groupe est actuellement suspendue.',
   SESSION_EXPIRED: 'Votre session a expiré. Veuillez vous reconnecter.',
   FORBIDDEN: "Vous n'avez pas accès à cette ressource.",
   UNAUTHORIZED: "Vous devez être connecté pour accéder à cette page.",

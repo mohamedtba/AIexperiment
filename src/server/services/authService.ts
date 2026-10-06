@@ -41,6 +41,12 @@ export async function loginStudent(
   const valid = await verifyPassword(input.password, passwordHash);
   if (!student || !valid) throw new AppError('INVALID_CREDENTIALS', 401);
 
+ // Per-group login switch: a student of a forbidden group cannot open a session.
+  const group = toStudentGroup(student.study_group);
+  if ((group === 'AI_LIBRE' && !access.loginAiLibre) || (group === 'AI_GUIDEE' && !access.loginAiGuidee)) {
+    throw new AppError('GROUP_LOGIN_DISABLED', 403);
+  }
+
   await studentRepository.touchLastLogin(student.id);
 
   return {

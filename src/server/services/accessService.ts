@@ -37,3 +37,12 @@ export function invalidateAccessCache(): void {
 export function isStudentAccessEnabled(): Promise<boolean> {
   return getAccessSettings().then((settings) => settings.studentAccessEnabled);
 }
+
+export async function setGroupLoginAllowed(
+  group: 'AI_LIBRE' | 'AI_GUIDEE',
+  allowed: boolean,
+): Promise<AccessSettings> {
+  const value = await settingsRepository.setGroupLoginAllowed(group, allowed);
+  cached = null;
+  return value;
+}

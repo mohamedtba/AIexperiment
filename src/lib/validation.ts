@@ -78,6 +78,14 @@ export const toggleAccessSchema = z
   })
   .strict();
 
+/** Enables or disables login for one student group. */
+export const toggleGroupAccessSchema = z
+  .object({
+    group: z.enum(['AI_LIBRE', 'AI_GUIDEE']),
+    allowed: z.boolean({ required_error: 'Valeur manquante.' }),
+  })
+  .strict();
+
 /** Moves a student to the other group. */
 export const updateStudentGroupSchema = z
   .object({

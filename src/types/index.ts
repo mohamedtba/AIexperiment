@@ -79,6 +79,9 @@ export interface AccessSettings {
   accessEpoch: number;
   updatedAt: Date;
   disabledAt: Date | null;
+  /** Per-group login switches (independent). */
+  loginAiLibre: boolean;
+  loginAiGuidee: boolean;
 }
 
 /** Activity counters used by the admin dashboard and experiment pages. */

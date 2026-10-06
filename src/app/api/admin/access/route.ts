@@ -1,7 +1,11 @@
 import { createRouteHandler, jsonOk } from '@/lib/api';
-import { toggleAccessSchema } from '@/lib/validation';
+import { toggleAccessSchema, toggleGroupAccessSchema } from '@/lib/validation';
 import { requireAdmin } from '@/server/auth/guards';
-import { getAccessSettings, updateStudentAccess } from '@/server/services/accessService';
+import {
+  getAccessSettings,
+  setGroupLoginAllowed,
+  updateStudentAccess,
+} from '@/server/services/accessService';
 
 /** GET /api/admin/access — current state of the global access switch. */
 export const GET = createRouteHandler({
@@ -12,6 +16,20 @@ export const GET = createRouteHandler({
       studentAccessEnabled: settings.studentAccessEnabled,
       updatedAt: settings.updatedAt.toISOString(),
       disabledAt: settings.disabledAt?.toISOString() ?? null,
+      loginAiLibre: settings.loginAiLibre,
+      loginAiGuidee: settings.loginAiGuidee,
+    });
+  },
+});
+
+export const PUT = createRouteHandler({
+  body: toggleGroupAccessSchema,
+  handler: async (_request, _context, input) => {
+    await requireAdmin();
+    const settings = await setGroupLoginAllowed(input.group, input.allowed);
+    return jsonOk({
+      loginAiLibre: settings.loginAiLibre,
+      loginAiGuidee: settings.loginAiGuidee,
     });
   },
 });
@@ -30,6 +48,8 @@ export const POST = createRouteHandler({
       studentAccessEnabled: settings.studentAccessEnabled,
       updatedAt: settings.updatedAt.toISOString(),
       disabledAt: settings.disabledAt?.toISOString() ?? null,
+      loginAiLibre: settings.loginAiLibre,
+      loginAiGuidee: settings.loginAiGuidee,
     });
   },
 });

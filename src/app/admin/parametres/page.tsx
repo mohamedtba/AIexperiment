@@ -13,6 +13,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AccessControl } from '@/components/admin/access-control';
+import { GroupAccessControl } from '@/components/admin/group-access-control';
 import { WipeDataButton } from '@/components/admin/wipe-data-button';
 import { PageHeader } from '@/components/shared/feedback';
 import { DateTime } from '@/components/shared/date-time';
@@ -138,6 +139,10 @@ export default async function AdminSettingsPage() {
               <AccessControl
                 initialEnabled={access.studentAccessEnabled}
                 updatedAtLabel={formatDateTimeFr(access.updatedAt)}
+              />
+              <GroupAccessControl
+                initialLibre={access.loginAiLibre}
+                initialGuidee={access.loginAiGuidee}
               />
             </CardContent>
           </Card>

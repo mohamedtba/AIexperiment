@@ -393,6 +393,12 @@ export const access = {
   resume: 'Autoriser l’accès',
   updated: 'Accès étudiant mis à jour',
   resumeTitle: 'Rouvrir l’accès aux étudiants',
+  groupToggleDescription:
+    'Autorisez ou suspendez la connexion de chaque groupe indépendamment. Les étudiants du groupe suspendu sont déconnectés à leur prochaine requête ; les données sont conservées.',
+  groupAllowed: 'Connexion du groupe autorisée',
+  groupSuspended: 'Connexion du groupe suspendue',
+  bothGroupsSuspended:
+    'Les deux groupes sont suspendus : aucun étudiant ne pourra se connecter.',
 } as const;
 
 export const errors = {

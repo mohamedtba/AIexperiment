@@ -109,6 +109,8 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
      disabled_at           timestamptz
    )`,
 
+  `alter table system_settings add column if not exists login_ai_libre boolean not null default true`,
+  `alter table system_settings add column if not exists login_ai_guidee boolean not null default true`,
   `create table if not exists counters (
      key   text primary key,
      value integer not null default 0

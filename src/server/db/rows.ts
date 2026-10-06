@@ -58,6 +58,8 @@ export interface AccessSettingsRow {
   access_epoch: number;
   updated_at: Date;
   disabled_at: Date | null;
+  login_ai_libre?: boolean | null;
+  login_ai_guidee?: boolean | null;
 }
 
 /* ------------------------------- mappers -------------------------------- */
@@ -106,5 +108,7 @@ export function mapAccessSettings(row: AccessSettingsRow): AccessSettings {
     accessEpoch: row.access_epoch,
     updatedAt: row.updated_at,
     disabledAt: row.disabled_at,
+    loginAiLibre: row.login_ai_libre ?? true,
+    loginAiGuidee: row.login_ai_guidee ?? true,
   };
 }
