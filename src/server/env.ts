@@ -69,7 +69,18 @@ export const env = {
     return Number.isFinite(parsed) && parsed >= 1 ? parsed : 12;
   },
   get aiProvider(): string {
-    return read('AI_PROVIDER') ?? 'gemini';
+    // OpenAI is the active provider; `gemini` remains registered for legacy
+    // deployments that still set GEMINI_API_KEY.
+    return read('AI_PROVIDER') ?? 'openai';
+  },
+  get openaiApiKey(): string | undefined {
+    return read('OPENAI_API_KEY');
+  },
+  get openaiModel(): string {
+    return read('OPENAI_MODEL') ?? 'gpt-4o-mini';
+  },
+  get openaiBaseUrl(): string {
+    return read('OPENAI_BASE_URL') ?? 'https://api.openai.com/v1';
   },
   get geminiApiKey(): string | undefined {
     return read('GEMINI_API_KEY');

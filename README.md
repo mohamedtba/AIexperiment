@@ -1,6 +1,6 @@
 # Atelier d’écriture IA — AI-assisted writing workshop platform
 
-A production-ready educational experiment platform built with **Next.js (App Router)**, **TypeScript**, **PostgreSQL** and **Google Gemini**.
+A production-ready educational experiment platform built with **Next.js (App Router)**, **TypeScript**, **PostgreSQL** and **OpenAI** (Gemini remains as a legacy provider option).
 
 A single administrator creates student accounts and runs writing experiments. Every student gets:
 
@@ -22,7 +22,7 @@ The administrator can suspend student access globally, browse every conversation
 4. [Installation](#installation)
 5. [Environment variables](#environment-variables)
 6. [PostgreSQL setup](#postgresql-setup)
-7. [Gemini API key](#gemini-api-key)
+7. [OpenAI API key](#openai-api-key)
 8. [Database initialisation](#database-initialisation)
 9. [Local development](#local-development)
 10. [Production build](#production-build)
@@ -81,8 +81,8 @@ The administrator can suspend student access globally, browse every conversation
 | Icons | lucide-react |
 | Database | PostgreSQL with the official driver (`pg`) behind a repository layer |
 | Authentication | JWT (`jose`) in an **HttpOnly** cookie, bcrypt password hashing |
-| AI | Provider abstraction (`AIProvider`) with a Gemini implementation using the official REST API |
-| Tests | Custom end-to-end harness (PGlite — real PostgreSQL compiled to WebAssembly, exposed over TCP + real production build + fake Gemini endpoint) |
+| AI | Provider abstraction (`AIProvider`) with OpenAI (Chat Completions) active by default; Gemini registered as a legacy option via the REST API |
+| Tests | Custom end-to-end harness (PGlite - real PostgreSQL compiled to WebAssembly, exposed over TCP + real production build + fake OpenAI-compatible endpoint) |
 
 All data access is centralised in `src/server/db/repositories/`, behind a small query layer (`src/server/db/client.ts`). The schema is created by the application itself on the first authenticated request, with idempotent statements and no migration tool.
 
@@ -92,7 +92,7 @@ All data access is centralised in `src/server/db/repositories/`, behind a small 
 
 - **Node.js ≥ 20.9** (22 LTS recommended)
 - A PostgreSQL database: [Neon](https://neon.tech) (free tier), Supabase, Render, or a local PostgreSQL ≥ 14
-- A Google Gemini API key — [AI Studio](https://aistudio.google.com/app/apikey) (free tier available)
+- An OpenAI API key - [platform.openai.com](https://platform.openai.com/api-keys)
 
 ---
 
@@ -122,10 +122,13 @@ $env:DATABASE_URL="postgresql://user:password@host/neondb?sslmode=verify-full"
 | `AUTH_SECRET` | yes | HMAC-SHA256 signing secret for session cookies. **Minimum 32 characters in production** (the app refuses to boot otherwise). Generate with `openssl rand -base64 48`. Changing it invalidates all sessions. |
 | `ADMIN_USERNAME` | yes (for the seed) | Username of the single administrator (default `admin`). Used only by `npm run seed:admin`. |
 | `ADMIN_PASSWORD` | yes (for the seed) | Administrator password. Used only by `npm run seed:admin`, then read by nothing at runtime. |
-| `AI_PROVIDER` | no | Provider registry key, `gemini` (default). |
-| `GEMINI_API_KEY` | yes (for the AI) | Server-side only. Obtained from AI Studio. Must be the 39-character key starting with `AIza`; any other value is rejected by Google (`API_KEY_INVALID`). |
-| `GEMINI_MODEL` | no | Default `gemini-3.8-flash`. Google retires models without warning — if the assistant reports that the model is unavailable, update this value to one currently served (AI Studio lists them). |
-| `GEMINI_BASE_URL` | no | Override the Gemini endpoint (useful for tests or a proxy). Default: official Google API. |
+| `AI_PROVIDER` | no | Provider registry key, `openai` (default) or `gemini`. |
+| `OPENAI_API_KEY` | yes (for the AI) | Server-side only. Obtained from platform.openai.com/api-keys. |
+| `OPENAI_MODEL` | no | Default `gpt-4o-mini`. |
+| `OPENAI_BASE_URL` | no | Override the OpenAI endpoint (useful for tests or a proxy). Default: official OpenAI API. |
+| `GEMINI_API_KEY` | no | Legacy: used only when `AI_PROVIDER=gemini`. |
+| `GEMINI_MODEL` | no | Default `gemini-3.8-flash`. |
+| `GEMINI_BASE_URL` | no | Override the Gemini endpoint (useful for tests or a proxy). |
 | `SESSION_MAX_AGE` | no | Session lifetime in seconds, default `43200` (12 h). |
 | `APP_URL` | no | Public URL of the deployment, used for metadata. |
 
@@ -147,11 +150,11 @@ postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=ver
 
 ---
 
-## Gemini API key
+## OpenAI API key
 
-1. Open [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Create an API key. It is **39 characters long and starts with `AIza`** (e.g. `AIzaSy…`).
-3. Put it in `GEMINI_API_KEY` (server-side only).
+1. Open [platform.openai.com](https://platform.openai.com/api-keys).
+2. Create an API key. It starts with `sk-` (e.g. `sk-proj-…`).
+3. Put it in `OPENAI_API_KEY` (server-side only) in `.env`.
 
 The key is read exclusively on the server (`src/server/env.ts`). A test in the suite (`Sécurité des secrets`) scans the client bundles and the server build output to make sure it never leaks.
 
@@ -159,8 +162,8 @@ Two server-configuration mistakes are reported with a dedicated French message i
 
 | Message | Cause |
 | --- | --- |
-| « La clé API de l'assistant IA est refusée par Google. » | `GEMINI_API_KEY` is missing, truncated, mistyped, revoked, or refers to another Google credential. Google answers `API_KEY_INVALID`. |
-| « Le modèle d'assistant IA configuré n'est plus disponible. » | `GEMINI_MODEL` designates a model Google no longer serves (Google retires models without warning). Pick a current one in `GEMINI_MODEL`. |
+| « La clé API de l'assistant IA est refusée par OpenAI. » | `OPENAI_API_KEY` is missing, truncated, mistyped, revoked, or refers to another OpenAI credential. |
+| « Le modèle d'assistant IA configuré n'est plus disponible. » | `OPENAI_MODEL` designates a model OpenAI no longer serves. Pick a current one (e.g. `gpt-4o-mini`). |
 
 ---
 
@@ -220,7 +223,7 @@ npm run build
 npm run start
 ```
 
-The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at runtime, and the Gemini variables for the AI features.
+The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at runtime, and the OpenAI variables for the AI features.
 
 ---
 
@@ -255,9 +258,9 @@ The build requires `DATABASE_URL`, `AUTH_SECRET` (≥ 32 chars) to be present at
 | `password authentication failed for user "…"` | Wrong username or password in `DATABASE_URL` | Copy the exact user from the provider dashboard; never keep a `<username>` placeholder. With Neon, keep the `-pooler` hostname as given |
 | `self-signed certificate in certificate chain` | The provider’s certificate is not trusted by Node.js | Use `sslmode=verify-full` (recommended); for a self-signed server, point `NODE_EXTRA_CA_CERTS` at the CA file |
 | `the database system is starting up` / `ECONNREFUSED` | The server is cold-starting or unreachable | Wait a few seconds and retry; on Neon, a scale-to-zero project wakes up on the first connection |
-| “L’assistant IA n’est pas configuré sur le serveur.” | `GEMINI_API_KEY` is empty | Set the key from <https://aistudio.google.com/app/apikey> and restart the server |
-| “La clé API de l’assistant IA est refusée par Google.” | `GEMINI_API_KEY` is not a Gemini key (must start with `AIza`, 39 characters) | Recopy the whole key; check `.env` has no leftover quotes or line break around the value |
-| “Le modèle d’assistant IA configuré n’est plus disponible.” | `GEMINI_MODEL` was retired by Google | Set `GEMINI_MODEL` to a model currently listed in AI Studio |
+| “L’assistant IA n’est pas configuré sur le serveur.” | `OPENAI_API_KEY` is empty | Set the key from <https://platform.openai.com/api-keys> and restart the server |
+| “La clé API de l’assistant IA est refusée par OpenAI.” | `OPENAI_API_KEY` is invalid | Must match an active OpenAI key from <https://platform.openai.com/api-keys> |
+| “Le modèle d’assistant IA configuré n’est plus disponible.” | `OPENAI_MODEL` refers to a retired model | Set `OPENAI_MODEL` to a current model such as `gpt-4o-mini` |
 
 ---
 
@@ -270,7 +273,7 @@ npm run test:e2e
 The harness is not a mock: it starts a **real production build** (`next start`) against
 
 - a **real PostgreSQL** ([PGlite](https://pglite.dev), the official Postgres compiled to WebAssembly and exposed over TCP, so `pg` connects to it exactly as it would to Neon — no Docker and no local server required),
-- a **local Gemini-compatible endpoint** (no API key, no internet required),
+- a **local OpenAI-compatible endpoint** (no API key, no internet required),
 
 then exercises the HTTP API with real cookies, plus a static scan of the built bundles. Current result: **226/226 checks green**, in 26 groups: authentication, student accounts, permissions, experiments, student area, AI assistant (success, quota, empty, malformed, safety filter, outage), writing versions, data isolation, admin inspection, password reset, archives, global access switch, workspace layout, experiment start/stop, student groups, PDF export, data wipe, login rate limit, new experiment, logout, French-only UI, and secret exposure.
 
@@ -305,7 +308,7 @@ Run through this list once after the deployment, on a phone and on a computer.
 
 19. **Open `/etudiant`** → the question of the day is displayed, in French.
 20. **Send a message to the AI** → an answer arrives; the exchange is stored.
-21. **Check independence of the two spaces** → the question of the day and the written text are **never** sent to Gemini (verify in the network panel: the payload only contains your messages).
+21. **Check independence of the two spaces** → the question of the day and the written text are **never** sent to the AI provider (verify in the network panel: the payload only contains your messages).
 22. **Refresh the page** → the conversation and the versions are still there.
 23. **Submit a text** (*Envoyer*) → version 1 appears with the *Dernière version* badge.
 24. **Click *Modifier*** → the latest text is loaded; saving creates **version 2**, version 1 is preserved above it.
@@ -322,7 +325,7 @@ Run through this list once after the deployment, on a phone and on a computer.
 scripts/
   seed-admin.mjs         # creates the single administrator
   ensure-indexes.mjs     # creates the indexes
-  test-e2e.mjs           # integration suite (real build + real DB + fake Gemini)
+  test-e2e.mjs           # integration suite (real build + real DB + fake AI)
 src/
   app/
     connexion/           # login page
@@ -336,7 +339,7 @@ src/
   lib/                    # api helpers, error taxonomy, validation schemas, types
   middleware.ts           # edge guard (signature check only, no database)
   server/
-    ai/                   # AIProvider abstraction + Gemini implementation
+    ai/                   # AIProvider abstraction + OpenAI/Gemini providers
     auth/                 # session, guards, password hashing, rate limiting
     db/                   # PostgreSQL pool, schema, row mappers, repositories
     services/             # use cases (admin, student, access)

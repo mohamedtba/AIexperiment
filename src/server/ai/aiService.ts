@@ -2,6 +2,7 @@ import 'server-only';
 
 import { AppError } from '@/lib/errors';
 import { env } from '../env';
+import { OpenAIProvider } from './OpenAIProvider';
 import { GeminiProvider } from './GeminiProvider';
 import {
   AIProviderError,
@@ -15,6 +16,7 @@ import {
  * Adding a provider = implement `AIProvider` + register it in the factory.
  */
 const providers: Record<string, () => AIProvider> = {
+  openai: () => new OpenAIProvider(),
   gemini: () => new GeminiProvider(),
 };
 
@@ -47,7 +49,7 @@ export function getAIProviderInfo(): {
   } catch {
     return {
       provider: env.aiProvider,
-      model: env.geminiModel,
+      model: env.aiProvider === 'openai' ? env.openaiModel : env.geminiModel,
       configured: false,
     };
   }

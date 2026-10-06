@@ -127,7 +127,10 @@ function startFakeGemini() {
   return new Promise((resolve) => {
     const server = createServer(async (req, res) => {
       const url = new URL(req.url, `http://127.0.0.1:${GEMINI_PORT}`);
-      if (!url.pathname.includes(':generateContent')) {
+      // Accept both the OpenAI Chat Completions route and the legacy Gemini one.
+      const isOpenAI = url.pathname.includes('/chat/completions');
+      const isGemini = url.pathname.includes(':generateContent');
+      if (!isOpenAI && !isGemini) {
         res.writeHead(404).end('{}');
         return;
       }
@@ -140,13 +143,22 @@ function startFakeGemini() {
       } catch {
         parsed = {};
       }
+      const parsedMessages = isOpenAI ? (parsed.messages ?? []) : [];
+      const geminiContents = !isOpenAI ? (parsed.contents ?? []) : [];
+
       geminiCalls.push({
         url: url.pathname,
         hasKey: Boolean(url.searchParams.get('key')),
-        model: url.pathname.split('/models/')[1]?.split(':')[0],
-        contents: parsed.contents ?? [],
-        systemInstruction: parsed.systemInstruction ?? null,
+        model: isOpenAI ? parsed.model : url.pathname.split('/models/')[1]?.split(':')[0],
+        contents: geminiContents,
+        systemInstruction: parsed.systemInstruction ?? parsedMessages[0]?.content ?? null,
+        messages: parsedMessages,
       });
+
+      // Requests from the OpenAI provider are chat/completions with a message list.
+      const lastUserText = isOpenAI
+        ? [...parsedMessages].reverse().find((m) => m.role === 'user')?.content
+        : [...geminiContents].reverse().find((item) => item.role === 'user')?.parts?.[0]?.text;
 
       const send = (status, payload) => {
         res.writeHead(status, { 'content-type': 'application/json' });
@@ -155,23 +167,37 @@ function startFakeGemini() {
 
       if (geminiMode === 'rate_limit') return send(429, { error: { message: 'quota' } });
       if (geminiMode === 'server_error') return send(503, { error: { message: 'oops' } });
-      if (geminiMode === 'empty') return send(200, { candidates: [{ content: { parts: [] } }] });
       if (geminiMode === 'garbage') return send(200, { unexpected: true });
+
+      if (isOpenAI) {
+        if (geminiMode === 'empty') {
+          return send(200, { choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop' }] });
+        }
+        if (geminiMode === 'blocked') {
+          return send(200, { choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'content_filter' }] });
+        }
+        return send(200, {
+          choices: [
+            {
+              message: { role: 'assistant', content: `Réponse de test à : « ${lastUserText ?? ''} »` },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        });
+      }
+
+      if (geminiMode === 'empty') return send(200, { candidates: [{ content: { parts: [] } }] });
       if (geminiMode === 'blocked') {
         return send(200, { candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }] });
       }
-
-      const lastUser = [...(parsed.contents ?? [])]
-        .reverse()
-        .find((item) => item.role === 'user')
-        ?.parts?.[0]?.text;
 
       return send(200, {
         candidates: [
           {
             content: {
               role: 'model',
-              parts: [{ text: `Réponse de test à : « ${lastUser ?? ''} »` }],
+              parts: [{ text: `Réponse de test à : « ${lastUserText ?? ''} »` }],
             },
             finishReason: 'STOP',
           },
@@ -236,9 +262,10 @@ async function run() {
       AUTH_SECRET,
       ADMIN_USERNAME,
       ADMIN_PASSWORD,
-      GEMINI_API_KEY: 'clé-de-test-gemini-1234567890',
-      GEMINI_BASE_URL: `http://127.0.0.1:${GEMINI_PORT}/v1beta`,
-      GEMINI_MODEL: 'gemini-3.8-flash',
+      OPENAI_API_KEY: 'clé-de-test-openai-1234567890',
+      OPENAI_BASE_URL: `http://127.0.0.1:${GEMINI_PORT}/v1`,
+      OPENAI_MODEL: 'gpt-4o-mini',
+      AI_PROVIDER: 'openai',
       SESSION_MAX_AGE: '3600',
       // The whole suite shares one IP, so it would otherwise exhaust the
       // production brake (12/minute) long before the last group runs.
@@ -454,23 +481,26 @@ async function runTests() {
     check('Message envoyé à l’IA', chat.response.status === 200, `HTTP ${chat.response.status}`);
     check('Réponse de l’IA reçue', Boolean(chat.data?.assistantMessage?.content));
     check(
-      'Requête Gemini effectuée côté serveur',
+      'Requête IA effectuée côté serveur',
       geminiCalls.length === before + 1,
       `${geminiCalls.length - before} appel(s)`,
     );
 
     const call = geminiCalls.at(-1);
+    const callTranscript = JSON.stringify(call.contents) + JSON.stringify(call.messages ?? []);
+    const sentMessages = call.messages?.length ? call.messages : call.contents;
     check(
       'La question du jour n’est PAS envoyée à l’IA',
-      !JSON.stringify(call.contents).includes('Protection de l’environnement'),
+      !callTranscript.includes('Protection de l’environnement'),
     );
     check(
       'Aucun contenu d’expression écrite transmis à l’IA',
-      !JSON.stringify(call.contents).includes('Braise'),
+      !callTranscript.includes('Braise'),
     );
     check(
       'L’IA ne reçoit que les messages du student',
-      call.contents.every((item) => ['user', 'model'].includes(item.role)),
+      sentMessages.every((item) => ['user', 'assistant', 'model', 'system'].includes(item.role)) &&
+        sentMessages.some((item) => item.role === 'user'),
     );
 
     const conversation = await alice.get('/api/student/ai/conversation');
@@ -492,7 +522,7 @@ async function runTests() {
     geminiMode = 'rate_limit';
     const rateLimited = await alice.postJson('/api/student/ai/chat', { content: 'Test quota' });
     check(
-      'Quota Gemini dépassé → message français clair',
+      'Quota du fournisseur IA dépassé → message français clair',
       rateLimited.response.status === 429 &&
         rateLimited.data?.error?.message ===
           "L'assistant IA est momentanément surchargé. Veuillez réessayer dans un instant.",
@@ -1162,7 +1192,7 @@ async function checkNoSecretExposure() {
     return;
   }
 
-  const needles = [AUTH_SECRET, ADMIN_PASSWORD, 'clé-de-test-gemini-1234567890', 'DATABASE_URL=', 'GEMINI_API_KEY='];
+  const needles = [AUTH_SECRET, ADMIN_PASSWORD, 'clé-de-test-openai-1234567890', 'DATABASE_URL=', 'OPENAI_API_KEY='];
   const leaks = [];
   for (const file of files) {
     const content = await readFile(path.join(chunksDir, file), 'utf8');

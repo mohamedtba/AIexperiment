@@ -308,7 +308,7 @@ export const settings = {
   aiConfigured: 'Configuré',
   aiNotConfigured: 'Non configuré',
   aiNotConfiguredHint:
-    'Renseignez GEMINI_API_KEY dans les variables d’environnement du serveur pour activer l’Assistant IA.',
+    'Renseignez OPENAI_API_KEY dans les variables d’environnement du serveur pour activer l’Assistant IA.',
   about: 'À propos',
   aboutValue:
     'Plateforme d’expérimentation pédagogique : un assistant IA et une expression écrite, deux espaces indépendants.',

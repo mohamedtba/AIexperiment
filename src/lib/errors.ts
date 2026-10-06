@@ -37,9 +37,9 @@ export const ERROR_MESSAGES = {
   AI_BLOCKED: "La demande a été bloquée par le filtre de sécurité de l'assistant IA.",
   AI_NOT_CONFIGURED: "L'assistant IA n'est pas configuré sur le serveur.",
   AI_INVALID_KEY:
-    "La clé API de l'assistant IA est refusée par Google. Vérifiez la variable GEMINI_API_KEY et l'activation de l'API Generative Language.",
+    "La clé API de l'assistant IA est refusée par OpenAI. Vérifiez la variable OPENAI_API_KEY.",
   AI_MODEL_UNAVAILABLE:
-    "Le modèle d'assistant IA configuré n'est plus disponible. Vérifiez la variable GEMINI_MODEL.",
+    "Le modèle d'assistant IA configuré n'est plus disponible. Vérifiez la variable OPENAI_MODEL.",
   AI_GENERIC_ERROR: "Une erreur est survenue. Veuillez réessayer.",
 
   // Expression écrite
