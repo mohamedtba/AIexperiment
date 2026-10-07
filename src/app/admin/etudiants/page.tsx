@@ -9,6 +9,7 @@ import { GroupBadge } from '@/components/admin/group-badge';
 import { DeleteStudentButton } from '@/components/admin/delete-student-button';
 import { GroupFilter } from '@/components/admin/group-filter';
 import { BulkStudentToolbar } from '@/components/admin/bulk-student-toolbar';
+import { StopLinkClick } from '@/components/admin/stop-link-click';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/alert';
@@ -169,14 +170,17 @@ export default async function AdminStudentsPage({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="student-bulk-checkbox h-4 w-4"
-                          value={student.id}
-                          data-username={student.username}
-                          data-group={student.group}
-                          aria-label={`${t.students.selectStudent} ${student.username}`}
-                        />
+                        {/* Cliquer sur la case ne doit pas ouvrir la fiche étudiant. */}
+                        <StopLinkClick>
+                          <input
+                            type="checkbox"
+                            className="student-bulk-checkbox h-4 w-4"
+                            value={student.id}
+                            data-username={student.username}
+                            data-group={student.group}
+                            aria-label={`${t.students.selectStudent} ${student.username}`}
+                          />
+                        </StopLinkClick>
                         <span className="font-mono text-base font-semibold tracking-wide">
                           {student.username}
                         </span>
