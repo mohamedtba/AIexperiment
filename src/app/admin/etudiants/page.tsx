@@ -8,6 +8,7 @@ import { ChangeStudentGroupButton } from '@/components/admin/change-student-grou
 import { GroupBadge } from '@/components/admin/group-badge';
 import { DeleteStudentButton } from '@/components/admin/delete-student-button';
 import { GroupFilter } from '@/components/admin/group-filter';
+import { BulkStudentToolbar } from '@/components/admin/bulk-student-toolbar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/alert';
@@ -63,6 +64,7 @@ export default async function AdminStudentsPage({
           shown={visible.length}
         />
       ) : null}
+      {students.length > 0 ? <BulkStudentToolbar /> : null}
 
       {students.length === 0 ? (
         <Card>
@@ -82,6 +84,9 @@ export default async function AdminStudentsPage({
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
+                  <th scope="col" className="w-10 px-4 py-3">
+                    <input type="checkbox" className="student-bulk-checkbox h-4 w-4" aria-label={t.students.selectAll} data-bulk-select-all />
+                  </th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.username}</th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.group}</th>
                   <th scope="col" className="px-5 py-3 font-medium">{t.students.createdAt}</th>
@@ -96,6 +101,16 @@ export default async function AdminStudentsPage({
               <tbody className="divide-y divide-border">
                 {visible.map((student) => (
                   <tr key={student.id} className="transition-colors hover:bg-muted/40">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        className="student-bulk-checkbox h-4 w-4"
+                        value={student.id}
+                        data-username={student.username}
+                        data-group={student.group}
+                        aria-label={`${t.students.selectStudent} ${student.username}`}
+                      />
+                    </td>
                     <td className="px-5 py-3">
                       <span className="font-mono font-semibold tracking-wide">{student.username}</span>
                     </td>
@@ -153,9 +168,19 @@ export default async function AdminStudentsPage({
                     className="block transition-colors hover:opacity-90"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-base font-semibold tracking-wide">
-                        {student.username}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="student-bulk-checkbox h-4 w-4"
+                          value={student.id}
+                          data-username={student.username}
+                          data-group={student.group}
+                          aria-label={`${t.students.selectStudent} ${student.username}`}
+                        />
+                        <span className="font-mono text-base font-semibold tracking-wide">
+                          {student.username}
+                        </span>
+                      </div>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                     </div>
 
