@@ -128,8 +128,10 @@ export function CreateStudentDialog() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accounts }),
       });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error?.message ?? ERROR_MESSAGES.SERVER_ERROR);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error?.message ?? ERROR_MESSAGES.SERVER_ERROR);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
