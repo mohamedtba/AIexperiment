@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Check, Copy, KeyRound, Minus, Plus, UserPlus } from 'lucide-react';
+import { Check, Copy, FileText, KeyRound, Minus, Plus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -120,6 +120,31 @@ export function CreateStudentDialog() {
   // Safe: every account of one request carries the same group.
   const groupLabel = accounts?.[0] ? t.groups[accounts[0].group] : '';
 
+  async function downloadPdf() {
+    if (!accounts) return;
+    try {
+      const response = await fetch('/api/admin/students/credentials-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accounts }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error?.message ?? ERROR_MESSAGES.SERVER_ERROR);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `identifiants-${groupLabel.replace(/\s+/g, '-').toLowerCase()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t.students.credentialsPdfSuccess);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : ERROR_MESSAGES.SERVER_ERROR);
+    }
+  }
+
   return (
     <Dialog
       open={open}
@@ -170,7 +195,7 @@ export function CreateStudentDialog() {
               </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void copyAll()}>
                 {copied === 'all' ? (
                   <Check className="h-4 w-4 text-success" aria-hidden />
@@ -178,6 +203,10 @@ export function CreateStudentDialog() {
                   <Copy className="h-4 w-4" aria-hidden />
                 )}
                 {copied === 'all' ? t.common.copied : t.students.copyAllList}
+              </Button>
+              <Button variant="outline" onClick={() => void downloadPdf()}>
+                <FileText className="h-4 w-4" aria-hidden />
+                {t.students.credentialsPdf}
               </Button>
               <Button onClick={() => setOpen(false)}>{t.common.close}</Button>
             </DialogFooter>

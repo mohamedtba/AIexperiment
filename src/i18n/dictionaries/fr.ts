@@ -178,6 +178,8 @@ export const students = {
   credentialsPassword: 'Mot de passe',
   copyAll: 'Copier les identifiants',
   copyAllList: 'Copier la liste',
+  credentialsPdf: 'Exporter en PDF',
+  credentialsPdfSuccess: 'Attestations téléchargées',
   copyUsername: 'Copier l’identifiant',
   copyPassword: 'Copier le mot de passe',
   created: 'Étudiant créé',

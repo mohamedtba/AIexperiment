@@ -120,13 +120,13 @@ function SidebarContent({ username }: { username: string }) {
               href={item.href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+                'flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm font-semibold transition-colors',
                 active
-                  ? 'bg-white/12 text-white shadow-sm'
-                  : 'text-sidebar-foreground/80 hover:bg-white/8 hover:text-white',
+                  ? 'border-white/20 bg-white/15 text-white shadow-sm'
+                  : 'border-transparent text-white/90 hover:bg-white/10 hover:text-white',
               )}
             >
-              <Icon className={cn('h-4 w-4 shrink-0', active && 'text-white')} />
+              <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-white' : 'text-white/70')} />
               <span className="truncate">{item.label}</span>
             </Link>
           );

@@ -86,6 +86,22 @@ export const toggleGroupAccessSchema = z
   })
   .strict();
 
+/** Exports the credentials of just-created accounts as a PDF. */
+export const credentialsPdfSchema = z
+  .object({
+    accounts: z
+      .array(
+        z.object({
+          username: z.string().regex(/^[a-z]{6}$/, 'Identifiant invalide.'),
+          password: z.string().regex(/^[0-9]{4}$/, 'Mot de passe invalide.'),
+          group: z.enum(['AI_LIBRE', 'AI_GUIDEE']),
+        }),
+      )
+      .min(1)
+      .max(50),
+  })
+  .strict();
+
 /** Moves a student to the other group. */
 export const updateStudentGroupSchema = z
   .object({

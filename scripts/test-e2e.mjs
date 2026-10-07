@@ -1825,6 +1825,18 @@ async function checkStudentGroups() {
     ),
   );
 
+  const credsPdf = await admin.request('/api/admin/students/credentials-pdf', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accounts: libreAccounts }),
+  });
+  check(
+    'Le PDF des identifiants créés est renvoyé',
+    credsPdf.status === 200 &&
+      credsPdf.headers.get('content-type') === 'application/pdf',
+    `HTTP ${credsPdf.status}`,
+  );
+
   /* --- bornes et validation --------------------------------------------- */
 
   const zero = await admin.postJson('/api/admin/students', {
