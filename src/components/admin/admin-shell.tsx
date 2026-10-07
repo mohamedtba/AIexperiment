@@ -76,7 +76,7 @@ export function AdminShell({
 
       <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
         <DialogContent
-          className="left-0 top-0 h-dvh w-[17rem] max-w-[85vw] translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 p-0 sm:rounded-none"
+          className="left-0 top-0 h-dvh w-[17rem] max-w-[85vw] translate-x-0 translate-y-0 rounded-none border-y-0 border-l-0 p-0 sm:rounded-none bg-sidebar text-sidebar-foreground border-sidebar-border [&>button]:text-sidebar-foreground/70"
           closeLabel={t.nav.closeMenu}
         >
           <DialogTitle className="sr-only">{t.nav.menu}</DialogTitle>
