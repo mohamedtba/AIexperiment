@@ -82,7 +82,6 @@ export function StudentWorkspace({
     <div className="space-y-4">
       <QuestionCard
         question={experiment.question}
-        sequence={experiment.sequence}
         startedAt={experiment.startedAt}
       />
 

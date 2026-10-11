@@ -47,7 +47,7 @@ export default async function ExperimentDetailPage({
       </Button>
 
       <PageHeader
-        title={t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
+        title={t.experiments.experimentDetailTitle}
         subtitle={`${t.experiments.startedAt} ${formatDateTimeFr(experiment.startedAt)}`}
         actions={
           <Badge variant={isActive ? 'success' : 'neutral'}>

@@ -217,7 +217,6 @@ export function CreateStudentDialog() {
           <>
             <DialogHeader>
               <DialogTitle>{t.students.createTitle}</DialogTitle>
-              <DialogDescription>{t.students.createIntro}</DialogDescription>
             </DialogHeader>
 
             <div className="mt-4 space-y-4">
@@ -246,15 +245,9 @@ export function CreateStudentDialog() {
                         ) : null}
                         {t.groups[value]}
                       </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {value === 'AI_LIBRE' ? t.groups.freeDetail : t.groups.guidedDetail}
-                      </span>
                     </button>
                   ))}
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t.groups.description}
-                </p>
               </fieldset>
 
               <div className="space-y-2">
@@ -295,7 +288,6 @@ export function CreateStudentDialog() {
                   >
                     <Plus className="h-4 w-4" aria-hidden />
                   </Button>
-                  <span className="text-xs text-muted-foreground">{t.students.quantityHint}</span>
                 </div>
               </div>
 

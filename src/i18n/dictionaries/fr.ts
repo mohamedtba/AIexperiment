@@ -271,7 +271,6 @@ export const experiments = {
   previousEmpty: 'Aucune expérience précédente.',
   previousEmptyHint:
     'Les expériences archivées apparaîtront ici avec la totalité des conversations IA et des expressions écrites.',
-  experimentNumber: 'Expérience n°{n}',
   archivedAt: 'Archivée le',
   participants: 'Participants',
   viewExperiment: 'Ouvrir l’expérience',

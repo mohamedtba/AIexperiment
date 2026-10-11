@@ -57,7 +57,7 @@ export async function buildStudentPdf(data: StudentPdfData): Promise<Buffer> {
     size: 'A4',
     margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
     info: {
-      Title: `${t.students.title} ${data.student.username} — ${t.experiments.experimentNumber.replace('{n}', String(data.experiment.sequence))}`,
+      Title: `${t.students.title} ${data.student.username}`,
       Author: t.common.appName,
       Subject: data.experiment.question,
       Creator: t.common.appName,
@@ -105,7 +105,7 @@ function writeHeader(doc: PDFKit.PDFDocument, data: StudentPdfData): void {
   const rows: Array<[string, string]> = [
     [t.students.username, student.username],
     [t.students.group, t.groups[group]],
-    [t.experiments.currentTitle, t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))],
+    [t.experiments.currentTitle, t.student.questionTitle],
     [t.experiments.startedAt, formatDateTimeFr(experiment.startedAt)],
   ];
 

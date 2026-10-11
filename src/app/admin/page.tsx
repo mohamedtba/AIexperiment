@@ -166,7 +166,6 @@ export default async function AdminDashboardPage() {
           <CardTitle>{t.admin.recentActivity}</CardTitle>
           {experiment ? (
             <CardDescription>
-              {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))} ·{' '}
               <RelativeTime value={experiment.startedAt} />
             </CardDescription>
           ) : null}

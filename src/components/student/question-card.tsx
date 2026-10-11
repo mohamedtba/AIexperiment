@@ -7,11 +7,9 @@ const t = getDictionary();
 /** Prominent display of the question of the day, shared by every student. */
 export function QuestionCard({
   question,
-  sequence,
   startedAt,
 }: {
   question: string;
-  sequence: number;
   startedAt: string | Date;
 }) {
   return (
@@ -29,7 +27,7 @@ export function QuestionCard({
         </h2>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <CalendarClock className="h-3.5 w-3.5" aria-hidden />
-          {t.experiments.experimentNumber.replace('{n}', String(sequence))}
+          {t.experiments.startedAt} {formatDateTimeFr(startedAt)}
         </span>
       </div>
 

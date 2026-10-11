@@ -19,7 +19,6 @@ import { getDictionary } from '@/i18n';
 import { formatDateFr } from '@/lib/utils';
 import { isAppError } from '@/lib/errors';
 import { getStudentDetail } from '@/server/services/adminService';
-import { getExperimentById } from '@/server/services/experimentService';
 
 const t = getDictionary();
 
@@ -43,7 +42,6 @@ export default async function AdminStudentDetailPage({
   }
 
   const { student, experiment, messages, versions } = detail;
-  const experimentRecord = experiment ? await getExperimentById(experiment.id) : null;
 
   return (
     <div className="space-y-6">
@@ -61,9 +59,7 @@ export default async function AdminStudentDetailPage({
           <div className="flex flex-wrap items-center justify-end gap-2">
             {experiment ? (
               <Badge variant={experiment.status === 'ACTIVE' ? 'success' : 'neutral'}>
-                {experimentRecord
-                  ? t.experiments.experimentNumber.replace('{n}', String(experimentRecord.sequence))
-                  : t.students.activity}
+                {t.students.activity}
                 {experiment.status === 'ACTIVE' ? ` · ${t.experiments.statusActive}` : ''}
               </Badge>
             ) : null}

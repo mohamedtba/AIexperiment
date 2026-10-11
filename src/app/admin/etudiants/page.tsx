@@ -18,7 +18,6 @@ import { DateTime, RelativeTime } from '@/components/shared/date-time';
 import { Button } from '@/components/ui/button';
 import { getDictionary } from '@/i18n';
 import { listStudentsWithActivity, getGroupCounts } from '@/server/services/adminService';
-import { getCurrentExperiment } from '@/server/services/experimentService';
 import { toStudentGroup } from '@/types';
 
 const t = getDictionary();
@@ -31,9 +30,8 @@ export default async function AdminStudentsPage({
 }: {
   searchParams: Promise<{ groupe?: string }>;
 }) {
-  const [students, experiment, counts, params] = await Promise.all([
+  const [students, counts, params] = await Promise.all([
     listStudentsWithActivity(),
-    getCurrentExperiment(),
     getGroupCounts(),
     searchParams,
   ]);
@@ -218,13 +216,6 @@ export default async function AdminStudentsPage({
                         <RelativeTime value={student.activity.lastActivityAt} />
                       </span>
                     </div>
-
-                    {experiment ? (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {t.students.activity} :{' '}
-                        {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
-                      </p>
-                    ) : null}
                   </Link>
 
                   {/* Hors du lien : un bouton dans un lien serait inaccessible au clavier. */}

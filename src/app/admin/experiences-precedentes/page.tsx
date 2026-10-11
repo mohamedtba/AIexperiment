@@ -53,7 +53,7 @@ export default async function PreviousExperimentsPage() {
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold">
-                          {t.experiments.experimentNumber.replace('{n}', String(experiment.sequence))}
+                          {t.experiments.experimentDetailTitle}
                         </span>
                         <Badge variant="neutral">{t.experiments.statusArchived}</Badge>
                       </div>
